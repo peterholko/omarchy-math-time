@@ -1,6 +1,6 @@
 # Math Time
 
-Friendly arithmetic facts for grades 1–6, with optional screen-time rewards.
+Friendly arithmetic facts for grades 1–7, with optional screen-time rewards.
 
 A community plugin for **Omarchy Quattro with the Quickshell plugin system**. It works on a regular Omarchy installation; an Omarchy Kids ISO or fork is not required. The plugin ID is `io.github.peterholko.math`.
 
@@ -15,7 +15,7 @@ omarchy-shell shell summon io.github.peterholko.math '{}'
 
 ## Play
 
-Practice uses local arithmetic facts for grades 1–6. Grades 5 and 6 use multiplication and division tables only. Practice works without the controls service. Earning time is available only when the separately installed Screen Time service enables it; answers and time grants are checked by that service.
+Practice uses the same local recall generator as the service, with grades 1–7: number bonds, facts within 20, core 1–10 multiplication/division tables, then familiar fractions, decimals, percentages, divisibility and signed facts. Practice works without the controls service. Earning time is available only when the School & Screen Time service enables it; answers and time grants are checked by that service.
 
 ### Optional app launcher and School Mode
 
@@ -30,7 +30,7 @@ The launcher has a unique ID. Check before replacing an existing file with that 
 
 ## Dependencies and data
 
-Uses the Quickshell and Qt Quick runtime supplied by Omarchy. Math Time also uses Python 3 to remember the chosen grade under the user’s XDG state directory. The optional controls service is not bundled with this plugin. School-mode status, if available, is read from `/var/lib/omarchy-kids-controls/`; the plugin does not write root-owned settings or reward totals.
+Uses the Quickshell and Qt Quick runtime supplied by Omarchy. Math Time uses Python 3’s standard library for offline questions and to remember the chosen grade under the user’s XDG state directory. The optional controls service is not bundled with this plugin. School-mode status, if available, is read from `/var/lib/omarchy-kids-controls/`; the plugin does not write root-owned settings or reward totals.
 
 ## Update
 

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Math Time
-Comment=Friendly arithmetic facts for grades 1–6, with optional screen-time rewards.
+Comment=Friendly arithmetic facts for grades 1–7, with optional screen-time rewards.
 Exec=omarchy-shell shell summon io.github.peterholko.math {}
 Icon=applications-education
 Terminal=false

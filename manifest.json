@@ -2,9 +2,8 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "author": "Peter Holko",
-  "description": "Friendly arithmetic facts for grades 1\u20136, with optional screen-time rewards.",
   "kinds": [
     "overlay"
   ],
@@ -12,5 +11,6 @@
   "entryPoints": {
     "overlay": "MathTime.qml"
   },
+  "description": "Friendly arithmetic facts for grades 1\u20137, with optional screen-time rewards.",
   "license": "MIT"
 }
