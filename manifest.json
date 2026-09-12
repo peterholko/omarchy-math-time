@@ -2,15 +2,17 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "author": "Peter Holko",
   "kinds": [
-    "overlay"
+    "overlay",
+    "service"
   ],
   "keepLoaded": true,
   "entryPoints": {
-    "overlay": "MathTime.qml"
+    "overlay": "MathTime.qml",
+    "service": "Service.qml"
   },
-  "description": "Friendly arithmetic facts for grades 1\u20137, with optional screen-time rewards.",
+  "description": "Thirty-minute multiplication-table practice with saved progress and a parent-password override.",
   "license": "MIT"
 }
