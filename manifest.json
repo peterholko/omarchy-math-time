@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Peter Holko",
   "kinds": [
     "overlay",
@@ -13,6 +13,6 @@
     "overlay": "MathTime.qml",
     "service": "Service.qml"
   },
-  "description": "Thirty-minute multiplication-table practice with saved progress and a parent-password override.",
+  "description": "50 multiplication questions in 30 minutes: score 40 to pass, or repeat 15-minute rounds with a 20-of-25 target.",
   "license": "MIT"
 }

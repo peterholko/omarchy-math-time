@@ -57,14 +57,15 @@ Item {
   function step(action: string): string {
     var watch = Quickshell.processes.find(p => p.command[3] === "watch")
     var control = Quickshell.processes.find(p => p.command[3] === "request")
-    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, required:true, show:true,
+    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, version:2, required:true, show:true,
       session:"session", question:{id:"question", a:7, b:8}, remaining:1800}))
+    else if (action === "old-service") watch.stdout.read('{"ok":true,"version":1,"required":true}')
     else if (action === "present") service.setPresence(true)
-    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, required:true, show:false, school:true}))
+    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:2, required:true, show:false, school:true}))
     else if (action === "offline") watch.stdout.read('{"ok":false,"error":"service_unavailable"}')
     else if (action === "request") service.request({cmd:"parent.end", password:"example-password"})
     else if (action === "reply") { control.stdout.text = '{"ok":false,"error":"bad_password"}'; control.running = false; control.exited(0) }
-    return JSON.stringify({summons:summons, hides:hides, state:service.state, connected:service.connected,
+    return JSON.stringify({summons:summons, hides:hides, state:service.state, connected:service.connected, error:service.error,
       busy:service.busy, parentBusy:service.parentBusy, writes:watch.writes, requests:control.writes,
       command:control.command, pending:service.pendingRequest, response:response})
   }
@@ -117,3 +118,8 @@ Item {
         status = self.step("offline")
         self.assertFalse(status["connected"])
         self.assertTrue(status["state"]["required"])
+
+    def test_old_service_needs_an_explicit_upgrade(self):
+        status = self.step("old-service")
+        self.assertFalse(status["connected"])
+        self.assertEqual(status["error"], "upgrade_required")

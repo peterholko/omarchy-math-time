@@ -47,8 +47,9 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({required:true, show:true, active:true, locked:false, school:false,
-      question:{id:"one", a:7, b:8}, session:"session", remaining:1800, credited:0, pending:0, correct:0})
+    property var state: ({version:2, required:true, show:true, active:true, locked:false, school:false,
+      round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
+      question:{id:"one", a:7, b:8}, session:"session", remaining:1800, correct:0})
     property bool connected: true
     property bool busy: false
     property bool parentBusy: false
@@ -82,7 +83,16 @@ Item {
       math.open("{}")
     } else if(action === "offline") service.connected = false
     else if(action === "complete") {
-      service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, correct:300})
+      service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, answered:50, correct:40, last_round:{questions:50, correct:40, passed:true}})
+    } else if(action === "waiting") {
+      service.state = Object.assign({}, service.state, {answered:50, correct:40, question:null, remaining:120})
+    } else if(action === "waiting-fail") {
+      service.state = Object.assign({}, service.state, {answered:50, correct:39, question:null, remaining:120})
+    } else if(action === "retry") {
+      math.answer = "56"
+      service.state = Object.assign({}, service.state, {round:2, question_count:25, target:20,
+        answered:0, correct:0, duration:900, remaining:900, question:{id:"retry-one", a:6, b:9},
+        last_round:{number:1, questions:50, target:40, correct:39, passed:false}})
     } else if(action === "close") math.close()
     return JSON.stringify({opened:math.opened, covering:math.covering, parentOpen:math.parentOpen,
       answer:math.answer, present:service.present, feedback:math.feedback, parentNote:math.parentNote,
@@ -118,7 +128,7 @@ Item {
         self.assertFalse(state["present"])
         self.assertTrue(self.step("escape")["present"])
 
-    def test_visible_question_and_timer_use_practice_state(self):
+    def view(self, name):
         from PySide6.QtQuick import QQuickWindow
         window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
         def find(item, name):
@@ -129,10 +139,32 @@ Item {
                 if found is not None:
                     return found
             return None
-        question = find(window.contentItem(), "multiplicationQuestion")
-        countdown = find(window.contentItem(), "practiceCountdown")
-        self.assertEqual(question.property("text"), "7 × 8 = ?")
-        self.assertEqual(countdown.property("text"), "30:00 of practice left")
+        return find(window.contentItem(), name)
+
+    def test_visible_question_and_timer_use_practice_state(self):
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "30:00 left in this round")
+
+    def test_finished_questions_wait_for_deadline_without_asking_more(self):
+        state = self.step("waiting")
+        self.assertTrue(state["opened"])
+        self.assertTrue(state["present"])
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "All 50 answered")
+        self.assertFalse(self.view("answerField").property("visible"))
+        self.assertIn("timer ends", self.view("roundGuidance").property("text"))
+
+    def test_follow_up_round_resets_input_and_displays_25_question_target(self):
+        state = self.step("retry")
+        self.assertEqual(state["answer"], "")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 9 = ?")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left in this round")
+        self.assertIn("0/25 answered", self.view("roundScore").property("text"))
+        self.assertIn("Goal: 20", self.view("roundScore").property("text"))
+        self.assertIn("39/50", self.view("roundGuidance").property("text"))
+
+    def test_result_screen_shows_the_passed_round_score(self):
+        self.step("complete")
+        self.assertIn("40/50 correct", self.view("roundScore").property("text"))
 
     def test_answers_reach_verifier_and_cannot_dismiss_an_active_session(self):
         state = self.step("answer")

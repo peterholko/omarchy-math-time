@@ -1,19 +1,26 @@
 # Math Time
 
-Thirty minutes of multiplication-table practice in a full-screen Omarchy plugin. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
+A full-screen multiplication challenge: **50 questions in 30 minutes, with 40 correct to pass**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.0 replaces this repository’s earlier optional arithmetic-and-rewards app.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.1 adds timed, scored rounds to the standalone plugin.
 
 ![Math Time multiplication practice](docs/practice.png)
 
 ## How practice works
 
-- Multiplication tables **1–12**, shuffled across all 144 facts. Every fact appears before the deck repeats.
-- **30 minutes of practice per day** by default, starting when the enrolled user reaches an unlocked desktop. Logging in or unlocking resumes unfinished practice; completing it ends the requirement for that day.
-- The question stays until the answer is correct. Wrong answers receive a hint.
-- The timer counts time with the practice screen present on the active, unlocked desktop. A correct answer commits that question’s time. Each question can contribute at most one minute, so leaving the screen unanswered cannot finish the session. The final answer must also be correct.
-- Locking, suspending, logging out or restarting pauses practice. Root-owned progress survives reboots; offline time does not count. A new calendar day starts a new daily session.
-- Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end it early; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
+| Round | Time | Questions | Correct answers needed |
+| --- | --- | --- | --- |
+| First round | 30 minutes | 50 | At least 40 |
+| Every follow-up | 15 minutes | 25 | At least 20 |
+
+- Multiplication tables **1–12**, shuffled across all 144 facts. Every fact appears before the deck repeats, including across follow-up rounds.
+- Each question is scored on its **first valid answer** and then advances. Incorrect answers show the correct fact. Corrections and duplicate submissions cannot earn extra points.
+- Each round lasts its full time. After the question quota is reached, the score stays visible until the timer ends; the app does not ask more questions in that round. Unanswered questions count as incorrect at the deadline.
+- At the deadline, a passing score finishes practice. Otherwise, a fresh 15-minute, 25-question round begins. Its score starts at zero and needs 20 correct; this repeats until a round passes. Previous rounds’ scores do not carry over.
+- The default is **one practice session per day**, starting on an unlocked desktop. A session can include several rounds. Finishing it ends the requirement for that day.
+- Time counts while the practice screen is present on the active, unlocked desktop. Leaving every question unanswered can never pass a round. Parent-password entry, School Mode, locking, suspending and closing the shell pause the clock.
+- Root-owned progress preserves the current round, question, score and remaining time across logout or reboot. Offline time does not count. Crossing midnight does not reset an unfinished round; finishing an overnight session satisfies the day it ends.
+- Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end the session early, including a follow-up; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
 - If the standalone **School Mode** service is present, practice is deferred or paused throughout School Mode and resumes in Free Time. An unavailable status for a known school enrollment also pauses practice. Installing School Mode is optional.
 
 The overlay covers every connected display and takes keyboard focus. This is a practice requirement within an enabled Omarchy shell plugin, not an OS security boundary: someone with administrator access or permission to disable the plugin can bypass its display. Do not remove the parent’s administrative access.
@@ -60,15 +67,15 @@ sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linn
 
 | Trigger | Behavior |
 | --- | --- |
-| `daily` | One 30-minute session per calendar day, automatically when the desktop is available. |
+| `daily` | One practice session per calendar day, automatically when the desktop is available; follow-up rounds continue until passed. |
 | `unlock` | A new session after each login/unlock; an unfinished session resumes instead of resetting. |
 | `manual` | Open Math Time and choose Start. Once started, practice remains required until completed or ended by a parent. |
 
-All three triggers pause during School Mode. Every session uses the same 30-minute multiplication requirement.
+All three triggers pause during School Mode. Every session uses the same initial 30-minute round and repeating 15-minute follow-up rules.
 
 ## Update
 
-Update both the shell plugin and its installed service. This also upgrades the earlier 0.2 plugin; existing practice progress and trigger settings are retained.
+Update both the shell plugin and its installed service. Trigger settings and version 1.1 round progress are retained. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores; days already completed or ended by a parent stay completed. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -120,7 +127,7 @@ python3 tests/capture_ui.py /tmp/math-time-previews
 omarchy plugin validate .
 ```
 
-Tests cover the full 30-minute requirement, all table facts, incorrect/replayed answers, idle/suspend time, persistence, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
+Tests cover the 40/50 and 20/25 thresholds, full round durations, repeated follow-ups, unanswered questions, deadline boundaries, all table facts, incorrect/replayed answers, pause/resume, reboot and version 1.0 migration, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
 
 ## License
 

@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 NAME = "peterholko-math-time"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SOURCE = Path(__file__).resolve().parents[1]
 PAYLOAD = Path("/usr/lib") / NAME
 ETC = Path("/etc") / NAME
@@ -115,7 +115,8 @@ def install(args):
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "--now", UNIT], check=True)
     subprocess.run(["systemctl", "restart", UNIT], check=True)
-    print(f"Math Time installed for {args.user}: 30 minutes, {config['users'][args.user]['trigger']} start.")
+    print(f"Math Time installed for {args.user}: 50 questions / 30 minutes, {config['users'][args.user]['trigger']} start.")
+    print("Pass with 40/50; otherwise repeat 15-minute rounds with a 20/25 target.")
     print("A parent can end practice early using the parent/root password.")
 
 

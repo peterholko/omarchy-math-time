@@ -8,6 +8,12 @@ Rectangle {
   property var controller
   readonly property var state: controller.state
   readonly property bool practising: sheet.state.required === true
+  readonly property int roundNumber: Number(sheet.state.round || 1)
+  readonly property int questionCount: Number(sheet.state.question_count || 50)
+  readonly property int targetScore: Number(sheet.state.target || 40)
+  readonly property int answeredCount: Number(sheet.state.answered || 0)
+  readonly property int correctCount: Number(sheet.state.correct || 0)
+  readonly property bool waiting: practising && answeredCount >= questionCount
   readonly property bool finished: !practising && (sheet.state.result === "complete" || sheet.state.result === "parent")
   readonly property bool compact: height < 850
   readonly property string family: Style.font.family
@@ -88,7 +94,8 @@ Rectangle {
     visible: !controller.parentOpen
     Text {
       width: parent.width
-      text: practising ? "Multiplication tables" : finished ? "Practice finished!" : "Make your tables second nature."
+      text: practising ? (sheet.roundNumber === 1 ? "Multiplication tables" : "Extra practice · Round " + sheet.roundNumber)
+        : finished ? "Practice finished!" : "Your multiplication round"
       textFormat: Text.PlainText
       color: Model.PALETTE.ink
       font { family: sheet.family; pixelSize: sheet.compact ? 30 : 40; bold: true }
@@ -97,9 +104,13 @@ Rectangle {
     }
     Text {
       width: parent.width
-      text: practising ? "Tables 1–12  ·  " + sheet.state.correct + " correct"
-        : finished ? (sheet.state.result === "parent" ? "An adult ended this session." : "Thirty minutes of practice. Well done!")
-        : "30 minutes of multiplication practice, one fact at a time."
+      objectName: "roundScore"
+      text: practising ? sheet.answeredCount + "/" + sheet.questionCount + " answered  ·  "
+          + sheet.correctCount + " correct  ·  Goal: " + sheet.targetScore
+        : finished ? (sheet.state.result === "parent" ? "An adult ended this session."
+          : sheet.state.last_round ? "Round passed: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions + " correct. Well done!"
+          : "Today's practice is finished. Well done!")
+        : "Tables 1–12 · 50 questions · 30 minutes · 40 correct to pass"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 18 }
       horizontalAlignment: Text.AlignHCenter
@@ -112,7 +123,7 @@ Rectangle {
       radius: 4
       color: "#eef0f5"
       Rectangle {
-        width: parent.width * Math.max(0, Math.min(1, 1 - Number(sheet.state.remaining || 0) / 1800))
+        width: parent.width * Math.max(0, Math.min(1, sheet.answeredCount / sheet.questionCount))
         height: parent.height
         radius: parent.radius
         color: Model.PALETTE.mark
@@ -122,7 +133,7 @@ Rectangle {
       objectName: "practiceCountdown"
       visible: practising
       width: parent.width
-      text: Model.clock(sheet.state.remaining) + " of practice left"
+      text: Model.clock(sheet.state.remaining) + " left in this round"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 19 }
       horizontalAlignment: Text.AlignHCenter
@@ -131,15 +142,17 @@ Rectangle {
       objectName: "multiplicationQuestion"
       visible: practising
       width: parent.width
-      text: sheet.state.question ? sheet.state.question.a + " × " + sheet.state.question.b + " = ?" : "Getting your question…"
+      text: sheet.waiting ? "All " + sheet.questionCount + " answered"
+        : sheet.state.question ? sheet.state.question.a + " × " + sheet.state.question.b + " = ?" : "Getting your question…"
       color: Model.PALETTE.ink
-      font { family: sheet.family; pixelSize: sheet.compact ? 55 : 78; bold: true }
+      font { family: sheet.family; pixelSize: sheet.waiting ? 34 : sheet.compact ? 55 : 78; bold: true }
       horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
     }
     TextField {
       id: answerField
       objectName: "answerField"
-      visible: practising
+      visible: practising && !sheet.waiting
       width: Math.min(parent.width, 260)
       height: sheet.compact ? 60 : 76
       anchors.horizontalCenter: parent.horizontalCenter
@@ -165,7 +178,8 @@ Rectangle {
     }
     Action {
       anchors.horizontalCenter: parent.horizontalCenter
-      text: controller.busy ? "Checking…" : practising ? "Check answer" : finished ? "Back to your desktop" : "Start 30-minute practice"
+      visible: !sheet.waiting
+      text: controller.busy ? "Checking…" : practising ? "Check answer" : finished ? "Back to your desktop" : "Start 50-question round"
       enabled: !controller.busy && (finished || (controller.connected && sheet.state.active === true
         && sheet.state.school === false && (!practising || controller.answer.length > 0)))
       onClicked: {
@@ -175,11 +189,27 @@ Rectangle {
       }
     }
     Text {
+      objectName: "roundGuidance"
+      width: parent.width
+      visible: practising
+      text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
+          ? "You reached your goal! Your desktop unlocks when this round's timer ends."
+          : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
+        : sheet.state.last_round && !sheet.state.last_round.passed
+          ? "Last round: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions
+            + ". Aim for 20/25 this round to finish."
+        : sheet.state.migration_note || "Each question counts once. Unanswered questions count as incorrect at the deadline."
+      textFormat: Text.PlainText
+      color: Model.PALETTE.inkSoft
+      font { family: sheet.family; pixelSize: 17 }
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
+    }
+    Text {
       objectName: "practiceFeedback"
       width: parent.width
       text: !controller.connected ? Model.errorText(controller.practiceService ? controller.practiceService.error : "service_unavailable")
-        : sheet.state.remaining <= 0 && practising ? "One last correct answer to finish your practice!"
-        : (sheet.state.pause || controller.feedback || (practising ? "Enter checks your answer. Take your time." : "Your progress is saved if you lock or restart."))
+        : (sheet.state.pause || controller.feedback || (sheet.waiting ? "Your answers are saved." : practising ? "Enter checks your answer. Take your time." : "Your progress is saved if you lock or restart."))
       textFormat: Text.PlainText
       color: controller.wrong ? Model.PALETTE.bad : Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 17 }

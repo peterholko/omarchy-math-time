@@ -82,6 +82,33 @@ class RuntimeTest(unittest.TestCase):
             self.assertNotIn("provider-register", code)
             self.assertNotIn("omarchy-kids-controls-time-client", code)
 
+    def test_late_answer_cannot_change_a_finished_round_score(self):
+        model = self.host.models[self.uid]
+        model.data.update(elapsed=1799, answered=49, correct=39)
+        q = model.question()
+        model.present(0, model.data["session"], q["id"], True)
+        result = self.host.dispatch(self.uid, {"cmd": "answer", "question": q["id"],
+            "answer": str(q["a"] * q["b"])}, now=1, day="2026-09-12")
+        self.assertEqual(result["error"], "stale_question")
+        self.assertEqual(result["state"]["round"], 2)
+        self.assertEqual(result["state"]["last_round"]["correct"], 39)
+        self.assertEqual(result["state"]["correct"], 0)
+        self.assertEqual(self.saved[self.user]["round"], 2)
+
+    def test_answer_just_before_deadline_can_supply_the_40th_point(self):
+        model = self.host.models[self.uid]
+        model.data.update(elapsed=1799, answered=49, correct=39)
+        q = model.question()
+        model.present(0, model.data["session"], q["id"], True)
+        result = self.host.dispatch(self.uid, {"cmd": "answer", "question": q["id"],
+            "answer": str(q["a"] * q["b"])}, now=0.5, day="2026-09-12")
+        self.assertTrue(result["correct"])
+        self.assertEqual(result["state"]["correct"], 40)
+        model.present(0.5, model.data["session"], "", True)
+        result = self.host.dispatch(self.uid, {"cmd": "status"}, now=1, day="2026-09-12")
+        self.assertFalse(result["required"])
+        self.assertEqual(result["result"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()

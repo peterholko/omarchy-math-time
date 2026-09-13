@@ -99,11 +99,17 @@ class Host:
                     return {"ok": False, "error": "bad_password"}
                 self.auth_failures[uid] = 0
                 self.auth_next.pop(uid, None)
-                self.models[uid].end_by_parent()
+                self.models[uid].end_by_parent(day)
                 self.save()
                 return {"ok": True, "state": self.models[uid].snapshot(time.monotonic())}
         with self.lock:
             model = self.models[uid]
+            previous = (model.data["round"], model.data["required"])
+            # Judge deadlines before accepting an answer, even if the next
+            # one-second daemon tick has not run yet.
+            model.advance(now, day, model.environment)
+            if previous != (model.data["round"], model.data["required"]):
+                self.save()
             if command == "status":
                 return model.snapshot(now)
             if command == "present":

@@ -19,6 +19,11 @@ Item {
 
   function apply(response) {
     if (response && response.ok === true) {
+      if (response.version !== 2) {
+        connected = false
+        error = "upgrade_required"
+        return
+      }
       connected = true
       error = ""
       state = response

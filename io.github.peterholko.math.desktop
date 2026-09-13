@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Math Time
-Comment=Thirty minutes of multiplication-table practice.
+Comment=50 multiplication questions with timed follow-up rounds.
 Exec=omarchy-shell shell summon io.github.peterholko.math {}
 Icon=applications-education
 Terminal=false

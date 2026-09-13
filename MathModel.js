@@ -9,6 +9,7 @@ function clock(seconds) {
 }
 function errorText(error) {
   switch (error) {
+    case "upgrade_required": return "A parent needs to upgrade Math Time's service with setup --upgrade."
     case "bad_password": return "That parent password wasn't accepted. Please try again."
     case "try_later": return "Please wait a moment before trying the parent password again."
     case "school_or_locked": return "Practice can start in Free Time on an unlocked desktop."

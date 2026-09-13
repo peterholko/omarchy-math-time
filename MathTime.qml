@@ -16,6 +16,7 @@ Item {
   property string feedback: ""
   property bool wrong: false
   property string parentNote: ""
+  property string roundKey: ""
   readonly property var practiceService: service || (shell ? shell.serviceFor("io.github.peterholko.math") : null)
   readonly property var state: practiceService ? practiceService.state : ({required: false, remaining: 1800})
   readonly property bool connected: practiceService ? practiceService.connected : false
@@ -58,6 +59,13 @@ Item {
     practiceService.request({cmd: "parent.end", password: password})
   }
   onStateChanged: {
+    var key = String(state.session || "") + ":" + String(state.round || 1)
+    if (key !== roundKey) {
+      roundKey = key
+      answer = ""
+      feedback = ""
+      wrong = false
+    }
     if (state.required && !state.show && connected) opened = false
     updatePresence()
   }
@@ -71,7 +79,7 @@ Item {
         else root.parentNote = Model.errorText(response.error)
       } else if (response.correct !== undefined) {
         root.wrong = !response.correct
-        root.feedback = response.correct ? "Correct! Keep going." : (response.hint || "Try that one again.")
+        root.feedback = response.hint || (response.correct ? "Correct! Keep going." : "Keep going. You can learn this one.")
         root.answer = ""
       } else if (!response.ok) {
         root.wrong = true
@@ -94,7 +102,7 @@ Item {
       exclusionMode: ExclusionMode.Ignore
       IdleInhibitor {
         window: practiceWindow
-        enabled: root.covering && root.state.required && root.state.pending < 60
+        enabled: root.covering && root.connected && root.state.required && !root.parentOpen
       }
       PracticeSheet { anchors.fill: parent; controller: root }
     }
