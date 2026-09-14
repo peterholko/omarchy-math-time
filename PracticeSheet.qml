@@ -221,14 +221,14 @@ Rectangle {
     Text {
       objectName: "roundGuidance"
       width: parent.width
-      visible: practising && !sheet.guidedRetry && !sheet.reviewing
+      visible: practising && !sheet.guidedRetry && !sheet.reviewing && text.length > 0
       text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
           ? "You reached your goal! Your desktop unlocks when this round's timer ends."
           : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
         : sheet.state.last_round && !sheet.state.last_round.passed
           ? "Last round: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions
             + ". Aim for 20/25 this round to finish."
-        : sheet.state.migration_note || "Each question counts once. Unanswered questions count as incorrect at the deadline."
+        : sheet.state.migration_note || ""
       textFormat: Text.PlainText
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 17 }

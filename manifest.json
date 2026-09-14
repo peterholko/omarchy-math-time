@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Peter Holko",
   "kinds": [
     "overlay",
