@@ -40,6 +40,10 @@ Run from Linnea’s desktop terminal. Only the explicit service setup uses `sudo
 omarchy pkg add python &&
 omarchy plugin add https://github.com/peterholko/omarchy-math-time --yes &&
 sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea &&
+mkdir -p "$HOME/.local/share/applications" &&
+install -m 644 \
+  "$HOME/.config/omarchy/plugins/io.github.peterholko.math/io.github.peterholko.math.desktop" \
+  "$HOME/.local/share/applications/io.github.peterholko.math.desktop" &&
 omarchy plugin enable io.github.peterholko.math
 ```
 
@@ -47,7 +51,9 @@ Enabling the plugin starts today’s practice immediately when Free Time is acti
 
 The parent override authenticates the existing root password through PAM. On a standard installation without a usable root password, an administrator should set the parent/root password with `sudo passwd root` before enrolling the child. Setup never changes any system password.
 
-### Optional app launcher
+### App launcher
+
+The install and update commands add Math Time to the app launcher. If it was installed using the earlier instructions, add its entry from the desktop account:
 
 ```bash
 mkdir -p "$HOME/.local/share/applications"
@@ -56,7 +62,14 @@ install -m 644 \
   "$HOME/.local/share/applications/io.github.peterholko.math.desktop"
 ```
 
-The unique launcher ID does not replace the built-in `omarchy.math` plugin. An approved-app policy may also need to allow `io.github.peterholko.math` to show the launcher; automatic practice does not depend on the launcher.
+The unique launcher ID does not replace the built-in `omarchy.math` plugin. With the separate [School / Free Time plugin](https://github.com/peterholko/omarchy-school-mode), version 1.1.2 or later allows Math Time in Free Time's launcher. If that plugin is installed, update its approved-app list and restart the shell:
+
+```bash
+omarchy plugin update io.github.peterholko.school-mode --yes &&
+omarchy restart shell
+```
+
+Math Time remains paused during School Mode. Automatic practice does not depend on the launcher entry.
 
 Open it directly with:
 
@@ -87,6 +100,10 @@ Update both the shell plugin and its installed service. Trigger settings and ver
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
 sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea --upgrade &&
+mkdir -p "$HOME/.local/share/applications" &&
+install -m 644 \
+  "$HOME/.config/omarchy/plugins/io.github.peterholko.math/io.github.peterholko.math.desktop" \
+  "$HOME/.local/share/applications/io.github.peterholko.math.desktop" &&
 omarchy plugin enable io.github.peterholko.math &&
 omarchy restart shell
 ```
