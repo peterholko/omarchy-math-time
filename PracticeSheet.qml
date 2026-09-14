@@ -163,7 +163,7 @@ Rectangle {
       width: parent.width
       text: sheet.reviewing ? "Let's remember this fact. Choose Continue when you're ready."
         : sheet.state.question && sheet.state.question.hint
-          ? sheet.state.question.hint + "\nTry once more. Only your first answer counts toward your score."
+          ? sheet.state.question.hint
           : ""
       textFormat: Text.PlainText
       color: Model.PALETTE.inkSoft
