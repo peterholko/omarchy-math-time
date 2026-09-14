@@ -3,6 +3,7 @@ import copy
 import secrets
 
 POLICY_VERSION = 2
+API_VERSION = 3
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
@@ -67,7 +68,13 @@ class Practice:
         self.question()
 
     def question(self):
-        if not self.data["required"] or self.data["answered"] >= self.question_count:
+        if not self.data["required"]:
+            return None
+        # A scored final question may still need its guided retry or review.
+        if self.data.get("question"):
+            self.data["question"].setdefault("stage", "first")
+            return self.data["question"]
+        if self.data["answered"] >= self.question_count:
             return None
         if not self.data.get("question"):
             if not self.data["deck"]:
@@ -75,7 +82,7 @@ class Practice:
                 secrets.SystemRandom().shuffle(deck)
                 self.data["deck"] = deck
             a, b = self.data["deck"].pop()
-            self.data["question"] = {"id": secrets.token_hex(16), "a": a, "b": b}
+            self.data["question"] = {"id": secrets.token_hex(16), "a": a, "b": b, "stage": "first"}
         return self.data["question"]
 
     def finish_round(self):
@@ -153,11 +160,27 @@ class Practice:
         question = self.question()
         if question is None or identifier != question["id"]:
             return {"ok": False, "error": "stale_question"}
+        if question["stage"] == "reveal":
+            return {"ok": False, "error": "acknowledgement_required"}
         value = str(answer).strip()
         if not value.isascii() or not value.isdecimal() or len(value) > 3:
             return {"ok": False, "error": "use_digits"}
         correct = int(value) == question["a"] * question["b"]
-        self.data["attempts"] += 1
+        fact = f"{question['a']} × {question['b']} = {question['a'] * question['b']}"
+        if question["stage"] == "retry":
+            # The original answer already fixed the score. The retry is only
+            # for learning, regardless of whether it succeeds.
+            if correct:
+                self.next_question()
+                return {"ok": True, "correct": True, "scored": False,
+                        "hint": "That's it! " + fact + ". Your score stays the same."}
+            self.data["question"] = {**question, "id": secrets.token_hex(16),
+                "stage": "reveal", "solution": question["a"] * question["b"]}
+            self.present_until = 0
+            return {"ok": True, "correct": False, "scored": False,
+                    "hint": "Let's remember: " + fact + ". Choose Continue when you're ready."}
+
+        self.data["attempts"] += 1  # Count only scored first answers.
         self.data["answered"] += 1
         if correct:
             self.data["correct"] += 1
@@ -166,14 +189,62 @@ class Practice:
             self.data["best_streak"] = max(self.data["best_streak"], self.data["streak"])
         else:
             self.data["streak"] = 0
-        # Both right and wrong submissions consume the question exactly once.
-        # Replays/retries cannot turn an incorrect first answer into a point.
+            hint = "Not quite. " + self.guided_hint(question["a"], question["b"])
+            # Rotate the token so a repeated first request cannot accidentally
+            # consume the one retry. The multiplication fact stays the same.
+            self.data["question"] = {**question, "id": secrets.token_hex(16),
+                                     "stage": "retry", "hint": hint}
+            self.present_until = 0
+            return {"ok": True, "correct": False, "scored": True, "hint": hint}
+        self.next_question()
+        return {"ok": True, "correct": True, "scored": True, "hint": "Correct! " + fact}
+
+    def next_question(self):
         self.data["question"] = None
         self.present_until = 0
         self.question()
-        fact = f"{question['a']} × {question['b']} = {question['a'] * question['b']}"
-        return {"ok": True, "correct": correct,
-                "hint": "Correct! " + fact if correct else "Let's remember: " + fact}
+
+    def acknowledge(self, identifier):
+        if not self.data["required"] or not self.usable():
+            return {"ok": False, "error": "not_practising"}
+        question = self.question()
+        if question is None or identifier != question["id"]:
+            return {"ok": False, "error": "stale_question"}
+        if question["stage"] != "reveal":
+            return {"ok": False, "error": "not_reviewing"}
+        self.next_question()
+        return {"ok": True, "acknowledged": True}
+
+    @staticmethod
+    def guided_hint(a, b):
+        if 1 in (a, b):
+            return "Multiplying by 1 keeps the other number the same."
+        if 10 in (a, b):
+            other = b if a == 10 else a
+            return f"Think of {other} tens. Write the number of tens, then a zero."
+        if 2 in (a, b):
+            other = b if a == 2 else a
+            return f"Double {other}: add {other} + {other}."
+        if 5 in (a, b):
+            other = b if a == 5 else a
+            return f"Work out {other} × 10, then halve it."
+        if 9 in (a, b):
+            other = b if a == 9 else a
+            return f"Work out {other} × 10, then subtract {other}."
+        if 11 in (a, b):
+            other = b if a == 11 else a
+            return f"Work out {other} × 10, then add one more {other}."
+        if 12 in (a, b):
+            other = b if a == 12 else a
+            return f"Add {other} × 10 and {other} × 2."
+        if b % 2 == 0:
+            return f"Work out {a} × {b // 2}, then double it."
+        if a % 2 == 0:
+            return f"Work out {a // 2} × {b}, then double it."
+        if 3 in (a, b):
+            other = b if a == 3 else a
+            return f"Double {other}, then add one more {other}."
+        return f"Split {b} into 5 + {b - 5}. Add {a} × 5 and {a} × {b - 5}."
 
     def end_by_parent(self, day=None):
         self.data["required"] = False
@@ -193,7 +264,7 @@ class Practice:
             pause = "Practice is paused while the desktop is locked or away."
         else:
             pause = ""
-        return {"ok": True, "version": POLICY_VERSION, "required": required,
+        return {"ok": True, "version": API_VERSION, "required": required,
                 "show": required and self.usable(), "session": self.data["session"],
                 "question": self.question(), "round": self.data["round"],
                 "question_count": self.question_count, "target": self.pass_score,

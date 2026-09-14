@@ -120,6 +120,8 @@ class Host:
                 result = model.start(day)
             elif command == "answer":
                 result = model.answer(message.get("question"), message.get("answer", ""))
+            elif command == "acknowledge":
+                result = model.acknowledge(message.get("question"))
             else:
                 return {"ok": False, "error": "unknown_command"}
             self.save()

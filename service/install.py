@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 NAME = "peterholko-math-time"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 SOURCE = Path(__file__).resolve().parents[1]
 PAYLOAD = Path("/usr/lib") / NAME
 ETC = Path("/etc") / NAME

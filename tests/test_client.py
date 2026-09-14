@@ -63,6 +63,24 @@ class ClientTest(unittest.TestCase):
         with patch("client.SOCKET", self.socket + "-missing"):
             self.assertEqual(client.request({"cmd": "status"})["error"], "service_unavailable")
 
+    def test_guided_retry_reveal_and_acknowledgement_round_trip(self):
+        status = client.request({"cmd": "status"})
+        original = status["question"]
+        first = client.request({"cmd": "answer", "question": original["id"], "answer": "999"})
+        retry = first["state"]["question"]
+        self.assertEqual(retry["stage"], "retry")
+        self.assertNotIn("solution", retry)
+        self.assertEqual(first["state"]["answered"], 1)
+        second = client.request({"cmd": "answer", "question": retry["id"], "answer": "999"})
+        reveal = second["state"]["question"]
+        self.assertEqual(reveal["stage"], "reveal")
+        self.assertEqual(reveal["solution"], original["a"] * original["b"])
+        result = client.request({"cmd": "acknowledge", "question": reveal["id"]})
+        self.assertTrue(result["acknowledged"])
+        self.assertEqual(result["state"]["correct"], 0)
+        self.assertEqual(result["state"]["answered"], 1)
+        self.assertEqual(result["state"]["question"]["stage"], "first")
+
     def test_watch_streams_state_then_stops_on_shell_disconnect(self):
         program = "import sys; sys.path.insert(0, " + repr(str(ROOT)) + "); import client; client.SOCKET = " + repr(self.socket) + "; client.watch()"
         process = subprocess.Popen([sys.executable, "-I", "-c", program], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

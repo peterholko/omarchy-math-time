@@ -2,7 +2,7 @@
 
 A full-screen multiplication challenge: **50 questions in 30 minutes, with 40 correct to pass**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.1 adds timed, scored rounds to the standalone plugin.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.2 adds one guided retry after an incorrect answer.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -14,14 +14,21 @@ Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin I
 | Every follow-up | 15 minutes | 25 | At least 20 |
 
 - Multiplication tables **1–12**, shuffled across all 144 facts. Every fact appears before the deck repeats, including across follow-up rounds.
-- Each question is scored on its **first valid answer** and then advances. Incorrect answers show the correct fact. Corrections and duplicate submissions cannot earn extra points.
-- Each round lasts its full time. After the question quota is reached, the score stays visible until the timer ends; the app does not ask more questions in that round. Unanswered questions count as incorrect at the deadline.
-- At the deadline, a passing score finishes practice. Otherwise, a fresh 15-minute, 25-question round begins. Its score starts at zero and needs 20 correct; this repeats until a round passes. Previous rounds’ scores do not carry over.
+- Each question is scored on its **first valid answer**. A correct answer advances. An incorrect answer stays on screen with a strategy hint and **one unscored retry**.
+- If the retry is correct, the app confirms it and advances. If it is still incorrect, the app shows the correct equation and waits for **Continue** (or Enter). The original score stays unchanged in either case; retries are part of the same question and do not use another slot in the 50- or 25-question quota.
+- Each round lasts its full time. After the question quota and any final retry/review are finished, the score stays visible until the timer ends; the app does not ask more questions in that round. Unanswered questions count as incorrect at the deadline.
+- The timer keeps running during hints and answer review. At the deadline, a passing score finishes practice. Otherwise, a fresh 15-minute, 25-question round begins. Its score starts at zero and needs 20 correct; this repeats until a round passes. Previous rounds’ scores do not carry over.
 - The default is **one practice session per day**, starting on an unlocked desktop. A session can include several rounds. Finishing it ends the requirement for that day.
 - Time counts while the practice screen is present on the active, unlocked desktop. Leaving every question unanswered can never pass a round. Parent-password entry, School Mode, locking, suspending and closing the shell pause the clock.
-- Root-owned progress preserves the current round, question, score and remaining time across logout or reboot. Offline time does not count. Crossing midnight does not reset an unfinished round; finishing an overnight session satisfies the day it ends.
+- Root-owned progress preserves the current round, question, retry/review step, score and remaining time across logout or reboot. Offline time does not count. Crossing midnight does not reset an unfinished round; finishing an overnight session satisfies the day it ends.
 - Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end the session early, including a follow-up; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
 - If the standalone **School Mode** service is present, practice is deferred or paused throughout School Mode and resumes in Free Time. An unavailable status for a known school enrollment also pauses practice. Installing School Mode is optional.
+
+### Example of a guided retry
+
+For **7 × 8**, an incorrect first answer gets the hint **“Work out 7 × 4, then double it.”** The answer remains hidden while the child tries once more. If that retry is also incorrect, the app reveals **7 × 8 = 56** and waits for Continue. Only the first answer contributes to the round’s passing score.
+
+![A strategy hint before the one unscored retry](docs/guided-retry.png)
 
 The overlay covers every connected display and takes keyboard focus. This is a practice requirement within an enabled Omarchy shell plugin, not an OS security boundary: someone with administrator access or permission to disable the plugin can bypass its display. Do not remove the parent’s administrative access.
 
@@ -75,7 +82,7 @@ All three triggers pause during School Mode. Every session uses the same initial
 
 ## Update
 
-Update both the shell plugin and its installed service. Trigger settings and version 1.1 round progress are retained. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores; days already completed or ended by a parent stay completed. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Trigger settings and version 1.1/1.2 round progress are retained. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores; days already completed or ended by a parent stay completed. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -127,7 +134,7 @@ python3 tests/capture_ui.py /tmp/math-time-previews
 omarchy plugin validate .
 ```
 
-Tests cover the 40/50 and 20/25 thresholds, full round durations, repeated follow-ups, unanswered questions, deadline boundaries, all table facts, incorrect/replayed answers, pause/resume, reboot and version 1.0 migration, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
+Tests cover the 40/50 and 20/25 thresholds, full round durations, repeated follow-ups, unanswered questions, deadline boundaries, all table facts, guided retries, answer acknowledgement, first-answer scoring, incorrect/replayed answers, pause/resume, reboot and version 1.0 migration, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
 
 ## License
 

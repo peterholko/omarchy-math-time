@@ -32,7 +32,12 @@ class PracticeTest(unittest.TestCase):
     def answer_round(self, correct):
         count = self.practice.question_count
         for i in range(count):
-            self.assertEqual(self.answer(i < correct)["correct"], i < correct)
+            self.complete_question(i < correct)
+
+    def complete_question(self, correct=True):
+        self.assertEqual(self.answer(correct)["correct"], correct)
+        if not correct:
+            self.assertTrue(self.answer()["correct"])
 
     def test_all_144_facts_are_covered_before_repetition_across_rounds(self):
         seen = set()
@@ -41,7 +46,7 @@ class PracticeTest(unittest.TestCase):
                 self.work(int(self.practice.duration - self.practice.data["elapsed"]))
             q = self.practice.question()
             seen.add((q["a"], q["b"]))
-            self.answer(False)
+            self.complete_question(False)
         self.assertEqual(seen, {(a, b) for a in range(1, 13) for b in range(1, 13)})
 
     def test_initial_round_requires_40_of_50_at_the_30_minute_deadline(self):
@@ -104,10 +109,18 @@ class PracticeTest(unittest.TestCase):
     def test_wrong_answers_consume_one_question_and_replays_cannot_change_score(self):
         q = copy.deepcopy(self.practice.question())
         result = self.answer(False)
-        self.assertIn(f"{q['a']} × {q['b']} = {q['a'] * q['b']}", result["hint"])
+        self.assertIn("Not quite.", result["hint"])
+        self.assertNotIn("solution", self.practice.question())
+        self.assertEqual(self.practice.question()["stage"], "retry")
         self.assertNotEqual(self.practice.question()["id"], q["id"])
         self.assertEqual(self.practice.data["answered"], 1)
         self.assertEqual(self.practice.data["correct"], 0)
+        result = self.answer()
+        self.assertTrue(result["correct"])
+        self.assertFalse(result["scored"])
+        self.assertEqual(self.practice.data["answered"], 1)
+        self.assertEqual(self.practice.data["correct"], 0)
+        self.assertEqual(self.practice.data["attempts"], 1)
         reply = self.practice.answer(q["id"], str(q["a"] * q["b"]))
         self.assertEqual(reply["error"], "stale_question")
         self.assertEqual(self.practice.data["answered"], 1)
@@ -120,11 +133,127 @@ class PracticeTest(unittest.TestCase):
         self.assertEqual(self.practice.question(), q)
         self.assertEqual(self.practice.data["answered"], 0)
 
+    def test_duplicate_first_submission_does_not_use_the_guided_retry(self):
+        original = copy.deepcopy(self.practice.question())
+        self.answer(False)
+        retry = copy.deepcopy(self.practice.question())
+        result = self.practice.answer(original["id"], "999")
+        self.assertEqual(result["error"], "stale_question")
+        self.assertEqual(self.practice.question(), retry)
+        self.assertEqual(self.practice.data["answered"], 1)
+
+    def test_hint_retries_then_reveals_answer_until_acknowledged(self):
+        self.practice.data["question"] = {"id": "seven-eight", "a": 7, "b": 8, "stage": "first"}
+        first = self.answer(False)
+        self.assertIn("7 × 4", first["hint"])
+        self.assertNotIn("56", first["hint"])
+        retry = copy.deepcopy(self.practice.question())
+        self.assertEqual(self.practice.acknowledge(retry["id"])["error"], "not_reviewing")
+        self.assertEqual(self.practice.answer(retry["id"], "")["error"], "use_digits")
+        self.assertEqual(self.practice.question(), retry)
+        second = self.answer(False)
+        self.assertFalse(second["scored"])
+        reveal = copy.deepcopy(self.practice.question())
+        self.assertEqual(reveal["stage"], "reveal")
+        self.assertEqual(reveal["solution"], 56)
+        self.assertIn("7 × 8 = 56", second["hint"])
+        self.assertEqual(self.practice.answer(reveal["id"], "56")["error"], "acknowledgement_required")
+        self.assertEqual(self.practice.acknowledge(retry["id"])["error"], "stale_question")
+        self.work(5)
+        self.assertEqual(self.practice.question(), reveal)
+        self.assertTrue(self.practice.acknowledge(reveal["id"])["acknowledged"])
+        self.assertNotEqual(self.practice.question()["id"], reveal["id"])
+        self.assertEqual(self.practice.question()["stage"], "first")
+        self.assertEqual(self.practice.data["answered"], 1)
+        self.assertEqual(self.practice.data["correct"], 0)
+        self.assertEqual(self.practice.data["attempts"], 1)
+        self.assertEqual(self.practice.data["total_correct"], 0)
+
+    def test_each_table_has_a_strategy_hint_without_the_final_equation(self):
+        for a in range(1, 13):
+            for b in range(1, 13):
+                hint = Practice.guided_hint(a, b)
+                self.assertTrue(hint)
+                self.assertNotIn(f"= {a * b}", hint)
+
+    def test_final_question_still_gets_one_retry_and_review_without_exceeding_quota(self):
+        for _ in range(49):
+            self.answer()
+        self.answer(False)
+        self.assertEqual(self.practice.data["answered"], 50)
+        self.assertEqual(self.practice.question()["stage"], "retry")
+        self.answer(False)
+        self.assertEqual(self.practice.question()["stage"], "reveal")
+        self.practice.acknowledge(self.practice.question()["id"])
+        self.assertIsNone(self.practice.question())
+        self.assertEqual(self.practice.data["answered"], 50)
+        self.assertEqual(self.practice.data["correct"], 49)
+
+    def test_guided_retry_and_reveal_resume_after_restart(self):
+        for stage in ("retry", "reveal"):
+            with self.subTest(stage=stage):
+                self.setUp()
+                self.answer(False)
+                if stage == "reveal":
+                    self.answer(False)
+                self.work(45)
+                saved = copy.deepcopy(self.practice.data)
+                restored = Practice(saved)
+                restored.advance(0, DAY, DESKTOP)
+                self.assertEqual(restored.question(), saved["question"])
+                self.assertEqual(restored.question()["stage"], stage)
+                self.assertEqual(restored.data["elapsed"], 45)
+                self.assertEqual(restored.data["answered"], 1)
+                self.assertEqual(restored.data["correct"], 0)
+
+    def test_tutoring_does_not_extend_deadline_or_supply_a_passing_point(self):
+        for reveal in (False, True):
+            with self.subTest(reveal=reveal):
+                self.setUp()
+                for _ in range(39):
+                    self.answer()
+                self.work(DURATION - 1)
+                self.answer(False)
+                if reveal:
+                    self.answer(False)
+                token = self.practice.question()["id"]
+                self.work(1)
+                self.assertEqual(self.practice.data["round"], 2)
+                self.assertEqual(self.practice.data["last_round"]["correct"], 39)
+                self.assertEqual(self.practice.answer(token, "56")["error"], "stale_question")
+                self.assertEqual(self.practice.acknowledge(token)["error"], "stale_question")
+
+    def test_school_mode_pauses_review_and_does_not_accept_continue(self):
+        self.answer(False)
+        self.answer(False)
+        question = copy.deepcopy(self.practice.question())
+        self.env = {**DESKTOP, "school": True}
+        self.work(30)
+        self.assertEqual(self.practice.data["elapsed"], 0)
+        self.assertEqual(self.practice.acknowledge(question["id"])["error"], "not_practising")
+        self.assertEqual(self.practice.question(), question)
+        self.env = dict(DESKTOP)
+        self.work(1)
+        self.assertTrue(self.practice.acknowledge(question["id"])["acknowledged"])
+
+    def test_version_11_round_progress_migrates_without_reset(self):
+        for _ in range(7):
+            self.answer()
+        self.work(123)
+        saved = copy.deepcopy(self.practice.data)
+        saved["question"].pop("stage")
+        migrated = Practice(saved)
+        self.assertEqual(migrated.question()["id"], saved["question"]["id"])
+        self.assertEqual(migrated.question()["stage"], "first")
+        self.assertEqual(migrated.data["elapsed"], 123)
+        self.assertEqual(migrated.data["answered"], 7)
+        self.assertEqual(migrated.data["correct"], 7)
+
     def test_quota_cannot_be_exceeded_by_more_submissions(self):
         last = None
         for _ in range(50):
             last = self.practice.question()
-            self.answer(False)
+            self.complete_question(False)
         self.assertIsNone(self.practice.question())
         reply = self.practice.answer(last["id"], str(last["a"] * last["b"]))
         self.assertEqual(reply["error"], "stale_question")

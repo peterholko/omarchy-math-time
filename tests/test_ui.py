@@ -9,7 +9,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
-from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, QUrl
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtTest import QTest
@@ -47,9 +47,9 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:2, required:true, show:true, active:true, locked:false, school:false,
+    property var state: ({version:3, required:true, show:true, active:true, locked:false, school:false,
       round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
-      question:{id:"one", a:7, b:8}, session:"session", remaining:1800, correct:0})
+      question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
     property bool busy: false
     property bool parentBusy: false
@@ -93,7 +93,25 @@ Item {
       service.state = Object.assign({}, service.state, {round:2, question_count:25, target:20,
         answered:0, correct:0, duration:900, remaining:900, question:{id:"retry-one", a:6, b:9},
         last_round:{number:1, questions:50, target:40, correct:39, passed:false}})
-    } else if(action === "close") math.close()
+    } else if(action === "guided") {
+      service.busy = false
+      service.state = Object.assign({}, service.state, {answered:1, correct:0,
+        question:{id:"guided-one", a:7, b:8, stage:"retry", hint:"Not quite. Work out 7 × 4, then double it."}})
+    } else if(action === "guided-last") {
+      service.state = Object.assign({}, service.state, {answered:50, correct:39,
+        question:{id:"guided-last", a:7, b:8, stage:"retry", hint:"Not quite. Work out 7 × 4, then double it."}})
+    } else if(action === "reveal") {
+      service.busy = false
+      service.state = Object.assign({}, service.state, {answered:1, correct:0,
+        question:{id:"revealed-one", a:7, b:8, stage:"reveal", solution:56}})
+    } else if(action === "retry-correct" || action === "acknowledged") {
+      service.busy = false
+      service.state = Object.assign({}, service.state, {answered:1, correct:0,
+        question:{id:"next-one", a:6, b:6, stage:"first"}})
+      service.reply(action === "acknowledged" ? {ok:true, acknowledged:true, action:"acknowledge"}
+        : {ok:true, correct:true, scored:false, action:"answer", hint:"That's it! 7 × 8 = 56. Your first-answer score stays the same."})
+    } else if(action === "acknowledge") math.acknowledge()
+    else if(action === "close") math.close()
     return JSON.stringify({opened:math.opened, covering:math.covering, parentOpen:math.parentOpen,
       answer:math.answer, present:service.present, feedback:math.feedback, parentNote:math.parentNote,
       request:service.requestValue, busy:service.busy, parentBusy:service.parentBusy})
@@ -173,6 +191,45 @@ Item {
         state = self.step("correct")
         self.assertEqual(state["answer"], "")
         self.assertTrue(state["opened"])
+
+    def test_guided_retry_keeps_question_hides_answer_and_preserves_score(self):
+        self.step("guided")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertIn("7 × 4", self.view("questionHelp").property("text"))
+        self.assertNotIn("56", self.view("questionHelp").property("text"))
+        self.assertEqual(self.view("practiceAction").property("text"), "Check retry")
+        self.assertTrue(self.view("answerField").property("visible"))
+        self.assertEqual(self.step("answer")["request"]["question"], "guided-one")
+        self.step("retry-correct")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 6 = ?")
+        self.assertIn("1/50 answered", self.view("roundScore").property("text"))
+        self.assertIn("0 correct", self.view("roundScore").property("text"))
+
+    def test_revealed_answer_waits_for_continue_and_enter_acknowledges(self):
+        from PySide6.QtQuick import QQuickWindow
+        self.step("reveal")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = 56")
+        self.assertFalse(self.view("answerField").property("visible"))
+        self.assertEqual(self.view("practiceAction").property("text"), "Continue")
+        self.assertTrue(self.view("practiceAction").property("enabled"))
+        self.assertEqual(self.step("inspect")["request"], {})
+        window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
+        QTest.keyClick(window, Qt.Key_Return)
+        state = self.step("inspect")
+        self.assertEqual(state["request"], {"cmd": "acknowledge", "question": "revealed-one"})
+        self.step("acknowledged")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 6 = ?")
+        self.assertTrue(self.view("answerField").property("visible"))
+
+    def test_final_scored_question_still_shows_its_retry(self):
+        self.step("guided-last")
+        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertTrue(self.view("answerField").property("visible"))
+        self.assertEqual(self.view("practiceAction").property("text"), "Check retry")
+        self.assertIn("50/50 answered", self.view("roundScore").property("text"))
+
+    def test_continue_cannot_skip_an_unanswered_question(self):
+        self.assertEqual(self.step("acknowledge")["request"], {})
 
     def test_parent_feedback_and_successful_early_exit(self):
         self.step("escape")

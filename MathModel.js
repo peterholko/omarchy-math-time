@@ -15,6 +15,8 @@ function errorText(error) {
     case "school_or_locked": return "Practice can start in Free Time on an unlocked desktop."
     case "finished_today": return "Today's practice is already finished."
     case "use_digits": return "Type your answer using digits."
+    case "acknowledgement_required": return "Read the correct answer, then choose Continue."
+    case "not_reviewing": return "Answer the question before continuing."
     case "stale_question": return "The question changed. Please answer the one shown."
     case "not_enrolled": return "A parent needs to run Math Time setup for this account."
     case "not_practising": return "Practice is paused. Your progress is saved."

@@ -17,6 +17,7 @@ Item {
   property bool wrong: false
   property string parentNote: ""
   property string roundKey: ""
+  property string questionKey: ""
   readonly property var practiceService: service || (shell ? shell.serviceFor("io.github.peterholko.math") : null)
   readonly property var state: practiceService ? practiceService.state : ({required: false, remaining: 1800})
   readonly property bool connected: practiceService ? practiceService.connected : false
@@ -50,8 +51,12 @@ Item {
     if (practiceService) practiceService.request({cmd: "start"})
   }
   function submit() {
-    if (busy || !connected || !state.question || !answer.trim()) return
+    if (busy || !connected || !state.question || state.question.stage === "reveal" || !answer.trim()) return
     practiceService.request({cmd: "answer", question: state.question.id, answer: answer.trim()})
+  }
+  function acknowledge() {
+    if (busy || !connected || !state.question || state.question.stage !== "reveal") return
+    practiceService.request({cmd: "acknowledge", question: state.question.id})
   }
   function endByParent(password) {
     if (!practiceService || busy) return
@@ -62,6 +67,13 @@ Item {
     var key = String(state.session || "") + ":" + String(state.round || 1)
     if (key !== roundKey) {
       roundKey = key
+      answer = ""
+      feedback = ""
+      wrong = false
+    }
+    var currentQuestion = state.question ? state.question.id : ""
+    if (currentQuestion !== questionKey) {
+      questionKey = currentQuestion
       answer = ""
       feedback = ""
       wrong = false

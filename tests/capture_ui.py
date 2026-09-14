@@ -29,7 +29,7 @@ def main():
         assert window.grabWindow().save(str(args.directory / "checking.png"))
         test.step("bad-password")
         test.step("escape")
-        for action in ("waiting", "waiting-fail", "retry", "complete"):
+        for action in ("waiting", "waiting-fail", "retry", "guided", "reveal", "complete"):
             test.step(action)
             QTest.qWait(100)
             assert window.grabWindow().save(str(args.directory / f"{action}.png"))

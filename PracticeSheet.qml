@@ -13,7 +13,9 @@ Rectangle {
   readonly property int targetScore: Number(sheet.state.target || 40)
   readonly property int answeredCount: Number(sheet.state.answered || 0)
   readonly property int correctCount: Number(sheet.state.correct || 0)
-  readonly property bool waiting: practising && answeredCount >= questionCount
+  readonly property bool waiting: practising && answeredCount >= questionCount && !sheet.state.question
+  readonly property bool guidedRetry: practising && !!sheet.state.question && sheet.state.question.stage === "retry"
+  readonly property bool reviewing: practising && !!sheet.state.question && sheet.state.question.stage === "reveal"
   readonly property bool finished: !practising && (sheet.state.result === "complete" || sheet.state.result === "parent")
   readonly property bool compact: height < 850
   readonly property string family: Style.font.family
@@ -24,8 +26,12 @@ Rectangle {
   function focusInput() {
     if (!visible) return
     if (controller.parentOpen) password.forceActiveFocus()
+    else if (sheet.waiting) parentButton.forceActiveFocus()
+    else if (sheet.reviewing || !sheet.practising) mainAction.forceActiveFocus()
     else if (practising) answerField.forceActiveFocus()
   }
+  onReviewingChanged: Qt.callLater(focusInput)
+  onGuidedRetryChanged: Qt.callLater(focusInput)
   onVisibleChanged: if (visible) Qt.callLater(focusInput)
   Component.onCompleted: Qt.callLater(focusInput)
   Connections {
@@ -35,7 +41,7 @@ Rectangle {
     function onBusyChanged() { if (!sheet.controller.busy) Qt.callLater(sheet.focusInput) }
   }
 
-  component Action: Button {
+  component PracticeButton: Button {
     id: action
     implicitHeight: 48
     implicitWidth: Math.max(150, contentItem.implicitWidth + 44)
@@ -70,7 +76,7 @@ Rectangle {
       height: parentButton.height
       verticalAlignment: Text.AlignVCenter
     }
-    Action {
+    PracticeButton {
       id: parentButton
       text: controller.parentOpen ? "Back to practice" : practising ? "Esc · Parent" : "Close"
       enabled: !controller.parentBusy
@@ -143,16 +149,32 @@ Rectangle {
       visible: practising
       width: parent.width
       text: sheet.waiting ? "All " + sheet.questionCount + " answered"
-        : sheet.state.question ? sheet.state.question.a + " × " + sheet.state.question.b + " = ?" : "Getting your question…"
+        : sheet.state.question ? sheet.state.question.a + " × " + sheet.state.question.b + " = "
+            + (sheet.reviewing ? sheet.state.question.solution : "?") : "Getting your question…"
       color: Model.PALETTE.ink
       font { family: sheet.family; pixelSize: sheet.waiting ? 34 : sheet.compact ? 55 : 78; bold: true }
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
+    }
+    Text {
+      objectName: "questionHelp"
+      lineHeight: 1.25
+      visible: sheet.guidedRetry || sheet.reviewing
+      width: parent.width
+      text: sheet.reviewing ? "Let's remember this fact. Choose Continue when you're ready."
+        : sheet.state.question && sheet.state.question.hint
+          ? sheet.state.question.hint + "\nTry once more. Only your first answer counts toward your score."
+          : ""
+      textFormat: Text.PlainText
+      color: Model.PALETTE.inkSoft
+      font { family: sheet.family; pixelSize: 18 }
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
     }
     TextField {
       id: answerField
       objectName: "answerField"
-      visible: practising && !sheet.waiting
+      visible: practising && !sheet.waiting && !sheet.reviewing
       width: Math.min(parent.width, 260)
       height: sheet.compact ? 60 : 76
       anchors.horizontalCenter: parent.horizontalCenter
@@ -176,22 +198,30 @@ Rectangle {
       onAccepted: controller.submit()
       Keys.onEscapePressed: controller.handleEscape()
     }
-    Action {
+    PracticeButton {
+      id: mainAction
+      objectName: "practiceAction"
       anchors.horizontalCenter: parent.horizontalCenter
       visible: !sheet.waiting
-      text: controller.busy ? "Checking…" : practising ? "Check answer" : finished ? "Back to your desktop" : "Start 50-question round"
+      text: controller.busy ? "Checking…" : sheet.reviewing ? "Continue" : sheet.guidedRetry ? "Check retry"
+        : practising ? "Check answer" : finished ? "Back to your desktop" : "Start 50-question round"
       enabled: !controller.busy && (finished || (controller.connected && sheet.state.active === true
-        && sheet.state.school === false && (!practising || controller.answer.length > 0)))
-      onClicked: {
-        if (practising) controller.submit()
+        && sheet.state.school === false && (sheet.reviewing || !practising || controller.answer.length > 0)))
+      function activate() {
+        if (!enabled) return
+        if (sheet.reviewing) controller.acknowledge()
+        else if (practising) controller.submit()
         else if (finished) controller.close()
         else controller.start()
       }
+      onClicked: activate()
+      Keys.onReturnPressed: event => { if (!event.isAutoRepeat) activate() }
+      Keys.onEnterPressed: event => { if (!event.isAutoRepeat) activate() }
     }
     Text {
       objectName: "roundGuidance"
       width: parent.width
-      visible: practising
+      visible: practising && !sheet.guidedRetry && !sheet.reviewing
       text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
           ? "You reached your goal! Your desktop unlocks when this round's timer ends."
           : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
@@ -207,6 +237,7 @@ Rectangle {
     }
     Text {
       objectName: "practiceFeedback"
+      visible: !controller.connected || (!sheet.guidedRetry && !sheet.reviewing)
       width: parent.width
       text: !controller.connected ? Model.errorText(controller.practiceService ? controller.practiceService.error : "service_unavailable")
         : (sheet.state.pause || controller.feedback || (sheet.waiting ? "Your answers are saved." : practising ? "Enter checks your answer. Take your time." : "Your progress is saved if you lock or restart."))
@@ -266,7 +297,7 @@ Rectangle {
       onAccepted: submitPassword()
       Keys.onEscapePressed: controller.handleEscape()
     }
-    Action {
+    PracticeButton {
       anchors.horizontalCenter: parent.horizontalCenter
       text: controller.parentBusy ? "Checking parent password…" : "End practice"
       enabled: !controller.busy && password.text.length > 0
