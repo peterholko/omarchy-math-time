@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 NAME = "peterholko-math-time"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 SOURCE = Path(__file__).resolve().parents[1]
 PAYLOAD = Path("/usr/lib") / NAME
 ETC = Path("/etc") / NAME
@@ -73,13 +73,15 @@ def read(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
 
-def configure(config, username, trigger):
+def configure(config, username):
     result = json.loads(json.dumps(config))
     users = result.setdefault("users", {})
-    options = users.setdefault(username, {"trigger": "daily"})
-    if trigger is not None:
-        options["trigger"] = trigger
-    result["version"] = 1
+    users.setdefault(username, {})
+    # This release makes the app manual for every enrollment, including
+    # accounts previously configured for daily or unlock-triggered practice.
+    for options in users.values():
+        options["trigger"] = "manual"
+    result["version"] = 2
     return result
 
 
@@ -106,7 +108,7 @@ def install(args):
     for path, (data, _mode) in files.items():
         safe_target(path)
         check_replacement(path, data, tracked, args.upgrade)
-    config = configure(read(ETC / "config.json", {"version": 1, "users": {}}), args.user, args.trigger)
+    config = configure(read(ETC / "config.json", {"version": 2, "users": {}}), args.user)
     for path, (data, mode) in files.items():
         atomic_file(path, data, mode)
     atomic_file(ETC / "config.json", (json.dumps(config, indent=2) + "\n").encode(), 0o600)
@@ -115,7 +117,7 @@ def install(args):
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "--now", UNIT], check=True)
     subprocess.run(["systemctl", "restart", UNIT], check=True)
-    print(f"Math Time installed for {args.user}: 50 questions / 30 minutes, {config['users'][args.user]['trigger']} start.")
+    print(f"Math Time installed for {args.user}: open the app and choose Start to begin 50 questions / 30 minutes.")
     print("Pass with 40/50; otherwise repeat 15-minute rounds with a 20/25 target.")
     print("A parent can end practice early using the parent/root password.")
 
@@ -152,7 +154,7 @@ def remove(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--user", required=True)
-    parser.add_argument("--trigger", choices=("daily", "unlock", "manual"))
+    parser.add_argument("--trigger", choices=("manual",), help="Compatibility option; Math Time always starts manually.")
     parser.add_argument("--upgrade", action="store_true")
     parser.add_argument("--remove", action="store_true")
     args = parser.parse_args()

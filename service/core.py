@@ -3,24 +3,25 @@ import copy
 import secrets
 
 POLICY_VERSION = 2
-API_VERSION = 3
+API_VERSION = 4
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
 RETRY_QUESTION_COUNT = 25
 PASS_SCORE = 40
 RETRY_PASS_SCORE = 20
-TRIGGERS = ("daily", "unlock", "manual")
 
 
 class Practice:
-    def __init__(self, saved=None, trigger="daily"):
+    def __init__(self, saved=None):
         self.data = copy.deepcopy(saved or {})
-        self.trigger = trigger
         self.last_tick = None
         self.present_until = 0
         self.environment = {}
-        self.was_locked = None
+        # Older versions could queue practice for a day, login or unlock.
+        # Only an explicit start request may begin a session now.
+        self.data.pop("activation_pending", None)
+        self.data.pop("login_session", None)
         self.data.setdefault("day", "")
         self.data.setdefault("required", False)
         self.data.setdefault("result", "")
@@ -117,25 +118,9 @@ class Practice:
             self.data["elapsed"] = min(self.duration, self.data["elapsed"] + elapsed)
             if self.data["elapsed"] >= self.duration:
                 if self.finish_round():
-                    # Finishing an overnight session also satisfies the day
-                    # it ends, rather than immediately starting another one.
+                    # Record the completion date without scheduling a new
+                    # session when the calendar or login changes.
                     self.data["day"] = max(day, self.data["day"])
-        session = str(environment.get("session") or "")
-        first_visit = not self.data["day"]
-        new_day = day > self.data["day"]
-        new_login = bool(session and session != self.data.get("login_session", ""))
-        unlocked = environment.get("locked") is False and self.was_locked is True
-        if self.trigger == "unlock" and (first_visit or new_login or unlocked):
-            self.data["activation_pending"] = True
-        due = (self.trigger == "daily" and (first_visit or new_day)) or (
-            self.trigger == "unlock" and self.data.get("activation_pending", False))
-        if due and usable and not self.data["required"]:
-            self.begin(day)
-        if due and usable:
-            self.data["activation_pending"] = False
-        if session:
-            self.data["login_session"] = session
-        self.was_locked = environment.get("locked")
 
     def present(self, now, session, question, visible):
         current = self.question()
@@ -149,8 +134,6 @@ class Practice:
     def start(self, day):
         if not self.usable():
             return {"ok": False, "error": "school_or_locked"}
-        if self.trigger == "daily" and self.data["day"] >= day and not self.data["required"]:
-            return {"ok": False, "error": "finished_today"}
         self.begin(day)
         return {"ok": True}
 
@@ -257,7 +240,7 @@ class Practice:
         env = self.environment
         required = self.data["required"]
         if env.get("school") is True:
-            pause = "School Mode is on. Practice will resume in Free Time."
+            pause = "School Mode is on. Open Math Time in Free Time to practise."
         elif env.get("school") is None:
             pause = "Waiting for School Mode status."
         elif env.get("locked") is not False or env.get("active") is not True:
@@ -274,5 +257,5 @@ class Practice:
                 "total_correct": self.data["total_correct"], "last_round": self.data["last_round"],
                 "streak": self.data["streak"], "best_streak": self.data["best_streak"],
                 "migration_note": self.data["migration_note"], "result": self.data["result"],
-                "pause": pause, "trigger": self.trigger, "school": env.get("school"),
+                "pause": pause, "trigger": "manual", "school": env.get("school"),
                 "locked": env.get("locked", True), "active": env.get("active", False), "day": self.data["day"]}

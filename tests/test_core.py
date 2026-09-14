@@ -16,6 +16,7 @@ class PracticeTest(unittest.TestCase):
         self.now = 0
         self.env = dict(DESKTOP)
         self.practice.advance(self.now, DAY, self.env)
+        self.assertTrue(self.practice.start(DAY)["ok"])
 
     def work(self, seconds, visible=True, day=DAY):
         for _ in range(seconds):
@@ -291,23 +292,34 @@ class PracticeTest(unittest.TestCase):
         self.assertEqual(self.practice.data["elapsed"], before)
         self.assertTrue(self.practice.snapshot(self.now)["show"])
 
-    def test_school_at_first_login_defers_automatic_start(self):
+    def test_calendar_login_unlock_and_free_time_never_start_practice(self):
         model = Practice()
-        model.advance(0, DAY, {**DESKTOP, "school": True})
-        self.assertFalse(model.data["required"])
-        model.advance(1, DAY, DESKTOP)
-        self.assertTrue(model.data["required"])
+        environments = [DESKTOP, {**DESKTOP, "school": True}, DESKTOP,
+                        {**DESKTOP, "locked": True}, DESKTOP,
+                        {**DESKTOP, "session": "new-boot:new-login"}]
+        for now, environment in enumerate(environments):
+            model.advance(now, "2026-09-13", environment)
+            self.assertFalse(model.data["required"])
+            self.assertFalse(model.snapshot(now)["show"])
+            self.assertIsNone(model.question())
+        self.assertTrue(model.start("2026-09-13")["ok"])
 
-    def test_daily_completion_and_parent_override_do_not_restart_on_unlock(self):
+    def test_completed_and_parent_ended_sessions_can_restart_manually_the_same_day(self):
         for result in ("complete", "parent"):
             self.practice.end_by_parent()
             self.practice.data["result"] = result
+            identifier = self.practice.data["session"]
             self.practice.advance(self.now + 1, DAY, {**DESKTOP, "locked": True})
             self.practice.advance(self.now + 2, DAY, DESKTOP)
             self.assertFalse(self.practice.data["required"])
-            self.assertEqual(self.practice.start(DAY)["error"], "finished_today")
-        self.practice.advance(self.now + 3, "2026-09-13", DESKTOP)
-        self.assertTrue(self.practice.data["required"])
+            self.assertTrue(self.practice.start(DAY)["ok"])
+            self.assertNotEqual(self.practice.data["session"], identifier)
+            self.assertEqual(self.practice.data["elapsed"], 0)
+            self.assertEqual(self.practice.data["answered"], 0)
+            self.assertEqual(self.practice.data["result"], "")
+            self.practice.end_by_parent()
+            self.practice.advance(self.now + 3, "2026-09-13", DESKTOP)
+            self.assertFalse(self.practice.data["required"])
 
     def test_midnight_keeps_unfinished_round_and_completion_satisfies_new_day(self):
         self.answer_round(40)
@@ -324,7 +336,7 @@ class PracticeTest(unittest.TestCase):
         self.assertFalse(self.practice.data["required"])
 
     def test_manual_start_is_explicit_and_reopen_keeps_progress(self):
-        model = Practice(trigger="manual")
+        model = Practice()
         model.advance(0, DAY, DESKTOP)
         self.assertFalse(model.data["required"])
         self.assertTrue(model.start(DAY)["ok"])
@@ -344,35 +356,31 @@ class PracticeTest(unittest.TestCase):
         self.practice.advance(1000000, "2026-09-11", DESKTOP)
         self.assertFalse(self.practice.data["required"])
 
-    def test_unlock_trigger_starts_once_and_preserves_unfinished_work(self):
-        model = Practice(trigger="unlock")
-        model.advance(0, DAY, DESKTOP)
-        model.data["elapsed"] = 123
-        identifier = model.data["session"]
-        model.advance(1, DAY, {**DESKTOP, "locked": True})
-        model.advance(2, DAY, DESKTOP)
-        self.assertEqual(model.data["session"], identifier)
-        self.assertEqual(model.data["elapsed"], 123)
-        model.end_by_parent()
-        model.advance(3, DAY, DESKTOP)
-        self.assertFalse(model.data["required"])
-        model.advance(4, DAY, {**DESKTOP, "locked": True})
-        model.advance(5, DAY, DESKTOP)
-        self.assertTrue(model.data["required"])
-        self.assertNotEqual(model.data["session"], identifier)
+    def test_manual_start_is_rejected_during_school_lock_or_missing_status(self):
+        model = Practice()
+        for change in ({"school": True}, {"school": None}, {"locked": True}, {"active": False}):
+            with self.subTest(change=change):
+                model.advance(0, DAY, {**DESKTOP, **change})
+                self.assertEqual(model.start(DAY)["error"], "school_or_locked")
+                self.assertFalse(model.data["required"])
 
-    def test_unlock_trigger_defers_school_and_detects_new_boot(self):
-        model = Practice(trigger="unlock")
-        model.advance(0, DAY, {**DESKTOP, "school": True})
-        self.assertFalse(model.data["required"])
-        model.advance(1, DAY, DESKTOP)
+    def test_legacy_queued_automatic_start_is_discarded_without_resetting_progress(self):
+        saved = copy.deepcopy(self.practice.data)
+        saved.update(activation_pending=True, login_session="old-login", elapsed=125,
+                     answered=7, correct=6)
+        model = Practice(saved)
+        model.advance(0, DAY, DESKTOP)
+        self.assertNotIn("activation_pending", model.data)
+        self.assertNotIn("login_session", model.data)
+        self.assertEqual(model.data["elapsed"], 125)
+        self.assertEqual(model.data["answered"], 7)
+        self.assertEqual(model.data["correct"], 6)
+        self.assertEqual(model.question(), saved["question"])
         self.assertTrue(model.data["required"])
-        model.end_by_parent()
-        restored = Practice(model.data, trigger="unlock")
-        restored.advance(0, DAY, DESKTOP)
-        self.assertFalse(restored.data["required"])
-        restored.advance(1, DAY, {**DESKTOP, "session": "new-boot:login-one"})
-        self.assertTrue(restored.data["required"])
+        for result in ("parent", "complete", ""):
+            restored = Practice({**saved, "required": False, "result": result})
+            restored.advance(1, "2026-09-13", {**DESKTOP, "session": "new-boot:login-one"})
+            self.assertFalse(restored.data["required"])
 
     def test_upgrade_keeps_finished_days_but_starts_unscored_old_session_fresh(self):
         old = {"day": DAY, "required": True, "session": "old-session", "credited": 1234,

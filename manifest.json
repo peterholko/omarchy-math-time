@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "author": "Peter Holko",
   "kinds": [
     "overlay",
@@ -13,6 +13,6 @@
     "overlay": "MathTime.qml",
     "service": "Service.qml"
   },
-  "description": "Timed multiplication rounds with first-answer scoring, one guided retry, and parent-password override.",
+  "description": "Manually started multiplication rounds with first-answer scoring, a guided retry, and parent-password override.",
   "license": "MIT"
 }

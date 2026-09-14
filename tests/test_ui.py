@@ -47,7 +47,7 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:3, required:true, show:true, active:true, locked:false, school:false,
+    property var state: ({version:4, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
       round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
       question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
@@ -80,7 +80,12 @@ Item {
       service.state = Object.assign({}, service.state, {show:false, school:true})
     } else if(action === "free") {
       service.state = Object.assign({}, service.state, {show:true, school:false})
-      math.open("{}")
+    } else if(action === "idle") {
+      service.busy = false; service.connected = true
+      service.state = Object.assign({}, service.state, {required:false, show:false, result:"", question:null,
+        school:false, locked:false, active:true})
+    } else if(action === "locked") {
+      service.state = Object.assign({}, service.state, {show:false, locked:true})
     } else if(action === "offline") service.connected = false
     else if(action === "complete") {
       service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, answered:50, correct:40, last_round:{questions:50, correct:40, passed:true}})
@@ -240,10 +245,41 @@ Item {
         self.step("parent")
         self.assertFalse(self.step("parent-ok")["opened"])
 
-    def test_school_pauses_overlay_and_free_time_resumes_it(self):
+    def test_school_pauses_overlay_and_free_time_requires_reopening(self):
         self.assertFalse(self.step("school")["covering"])
         self.assertFalse(self.step("inspect")["present"])
-        self.assertTrue(self.step("free")["covering"])
+        self.assertFalse(self.step("free")["covering"])
+        self.assertTrue(self.step("open")["covering"])
+
+    def activate_main_action(self):
+        self.assertTrue(QMetaObject.invokeMethod(self.view("practiceAction"), "activate"))
+        return self.step("inspect")
+
+    def test_opening_idle_app_waits_for_explicit_start(self):
+        self.step("idle")
+        self.step("close")
+        self.assertEqual(self.step("open")["request"], {})
+        self.assertEqual(self.view("practiceAction").property("text"), "Start 50-question round")
+        self.assertEqual(self.activate_main_action()["request"], {"cmd": "start"})
+
+    def test_finished_and_parent_ended_sessions_offer_another_manual_start(self):
+        for result in ("parent-ok", "complete"):
+            with self.subTest(result=result):
+                self.step(result)
+                self.step("open")
+                self.assertEqual(self.view("practiceAction").property("text"), "Start another session")
+                state = self.activate_main_action()
+                self.assertEqual(state["request"], {"cmd": "start"})
+                self.assertTrue(state["opened"])
+                self.step("correct")
+
+    def test_manual_start_button_requires_available_free_time(self):
+        for action in ("school", "locked", "offline"):
+            with self.subTest(action=action):
+                self.step("idle")
+                self.step(action)
+                self.assertFalse(self.view("practiceAction").property("enabled"))
+                self.assertEqual(self.activate_main_action()["request"], {})
 
     def test_connection_failure_does_not_release_required_practice(self):
         self.step("offline")

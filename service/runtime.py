@@ -54,10 +54,10 @@ class Host:
         self.auth_next = {}
         self.auth_busy = set()
         self.auth_failures = {}
-        for username, options in config["users"].items():
+        for username in config["users"]:
             uid = pwd.getpwnam(username).pw_uid
             self.users[uid] = username
-            self.models[uid] = Practice(saved.get(username), options.get("trigger", "daily"))
+            self.models[uid] = Practice(saved.get(username))
 
     def save(self):
         self.persist({self.users[uid]: model.data for uid, model in self.models.items()})

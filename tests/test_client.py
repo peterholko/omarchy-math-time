@@ -26,8 +26,9 @@ class ClientTest(unittest.TestCase):
         self.socket = str(Path(self.temp.name) / "sock")
         self.uid = os.getuid()
         username = pwd.getpwuid(self.uid).pw_name
-        self.host = Host({"users": {username: {"trigger": "daily"}}}, {}, lambda data: None)
+        self.host = Host({"users": {username: {"trigger": "manual"}}}, {}, lambda data: None)
         self.host.tick(0, "2026-09-12", {self.uid: {"active": True, "locked": False, "school": False, "session": "login"}})
+        self.host.dispatch(self.uid, {"cmd": "start"}, now=0, day="2026-09-12")
         fixture = self
 
         class Handler(socketserver.StreamRequestHandler):

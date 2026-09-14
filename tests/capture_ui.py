@@ -33,6 +33,15 @@ def main():
             test.step(action)
             QTest.qWait(100)
             assert window.grabWindow().save(str(args.directory / f"{action}.png"))
+        for action in ("idle", "parent-ok"):
+            test.step(action)
+            test.step("open")
+            for width, height in ((1280, 720), (800, 600)):
+                window.resize(width, height)
+                window.contentItem().setWidth(width)
+                window.contentItem().setHeight(height)
+                QTest.qWait(100)
+                assert window.grabWindow().save(str(args.directory / f"{action}-{width}x{height}.png"))
     finally:
         test.doCleanups()
 

@@ -34,7 +34,7 @@ class InstallTest(unittest.TestCase):
             username = pwd.getpwuid(os.getuid()).pw_name
             account = argparse.Namespace(pw_uid=1000)
             stack.enter_context(patch("install.pwd.getpwnam", return_value=account))
-            args = argparse.Namespace(user=username, trigger="unlock", upgrade=False)
+            args = argparse.Namespace(user=username, trigger=None, upgrade=False)
             other = base / "usr/lib/peterholko-screen-time/untouched"
             other.parent.mkdir(parents=True)
             other.write_text("other service")
@@ -43,6 +43,7 @@ class InstallTest(unittest.TestCase):
             self.assertEqual((etc / "config.json").stat().st_mode & 0o777, 0o600)
             progress = state / "practice.json"
             progress.write_text('{"saved-progress": 900}')
+            (etc / "config.json").write_text(json.dumps({"version": 1, "users": {username: {"trigger": "unlock"}}}))
             runtime = payload / "runtime.py"
             original, mode = files[runtime]
             files[runtime] = (original + b"\n# upgrade fixture\n", mode)
@@ -50,7 +51,7 @@ class InstallTest(unittest.TestCase):
             args.trigger = None
             install.install(args)
             self.assertEqual(progress.read_text(), '{"saved-progress": 900}')
-            self.assertEqual(json.loads((etc / "config.json").read_text())["users"][username]["trigger"], "unlock")
+            self.assertEqual(json.loads((etc / "config.json").read_text())["users"][username]["trigger"], "manual")
             self.assertIn(b"upgrade fixture", runtime.read_bytes())
             install.remove(args)
             self.assertFalse(payload.exists())

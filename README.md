@@ -1,8 +1,8 @@
 # Math Time
 
-A full-screen multiplication challenge: **50 questions in 30 minutes, with 40 correct to pass**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
+A manually started, full-screen multiplication app: **50 questions in 30 minutes, with 40 correct to pass**. Open **Math Time** from the app launcher and choose **Start 50-question round**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.2 adds one guided retry after an incorrect answer.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.3 makes all sessions manual, including existing installations previously configured for daily or login/unlock starts.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -18,11 +18,12 @@ Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin I
 - If the retry is correct, the app confirms it and advances. If it is still incorrect, the app shows the correct equation and waits for **Continue** (or Enter). The original score stays unchanged in either case; retries are part of the same question and do not use another slot in the 50- or 25-question quota.
 - Each round lasts its full time. After the question quota and any final retry/review are finished, the score stays visible until the timer ends; the app does not ask more questions in that round. Unanswered questions count as incorrect at the deadline.
 - The timer keeps running during hints and answer review. At the deadline, a passing score finishes practice. Otherwise, a fresh 15-minute, 25-question round begins. Its score starts at zero and needs 20 correct; this repeats until a round passes. Previous rounds’ scores do not carry over.
-- The default is **one practice session per day**, starting on an unlocked desktop. A session can include several rounds. Finishing it ends the requirement for that day.
+- **Every new session starts manually.** Booting, logging in, unlocking, changing the date or returning to Free Time never opens Math Time or starts a session. Open the app and choose Start when it is time to practise.
+- After passing or a parent ending a session, open Math Time and choose **Start another session** to begin a fresh round, including on the same day. The previous result never blocks a new manual start.
 - Time counts while the practice screen is present on the active, unlocked desktop. Leaving every question unanswered can never pass a round. Parent-password entry, School Mode, locking, suspending and closing the shell pause the clock.
-- Root-owned progress preserves the current round, question, retry/review step, score and remaining time across logout or reboot. Offline time does not count. Crossing midnight does not reset an unfinished round; finishing an overnight session satisfies the day it ends.
+- Root-owned progress preserves the current round, question, retry/review step, score and remaining time across logout or reboot. Open Math Time again to resume unfinished work. Offline time does not count, and crossing midnight does not reset a round.
 - Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end the session early, including a follow-up; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
-- If the standalone **School Mode** service is present, practice is deferred or paused throughout School Mode and resumes in Free Time. An unavailable status for a known school enrollment also pauses practice. Installing School Mode is optional.
+- If the standalone **School Mode** service is present, practice is unavailable throughout School Mode. Open Math Time again in Free Time to resume. An unavailable status for a known school enrollment also pauses practice. Installing School Mode is optional.
 
 ### Example of a guided retry
 
@@ -47,7 +48,7 @@ install -m 644 \
 omarchy plugin enable io.github.peterholko.math
 ```
 
-Enabling the plugin starts today’s practice immediately when Free Time is active. No logout or supplementary-group refresh is needed. If Math Time is already installed, use the update instructions below.
+After installation, open **Math Time** from the app launcher and choose **Start 50-question round** in Free Time. Enabling the plugin does not open the app or begin practice. No logout or supplementary-group refresh is needed. If Math Time is already installed, use the update instructions below.
 
 The parent override authenticates the existing root password through PAM. On a standard installation without a usable root password, an administrator should set the parent/root password with `sudo passwd root` before enrolling the child. Setup never changes any system password.
 
@@ -69,7 +70,7 @@ omarchy plugin update io.github.peterholko.school-mode --yes &&
 omarchy restart shell
 ```
 
-Math Time remains paused during School Mode. Automatic practice does not depend on the launcher entry.
+Math Time remains paused during School Mode. The launcher opens its own practice screen; an unfinished session resumes when you open it again.
 
 Open it directly with:
 
@@ -77,25 +78,15 @@ Open it directly with:
 omarchy-shell shell summon io.github.peterholko.math '{}'
 ```
 
-### Choose when practice starts
+### Start or resume a session
 
-Setup defaults to `daily`. An administrator can change the trigger at any time without resetting an unfinished session:
+Open **Math Time** from the launcher, or use the command above. Choose **Start 50-question round** for a new session or **Start another session** after a previous result. If a session is unfinished, reopening the app resumes it without resetting its score or timer. Once started, it must be completed or ended with the parent password before returning to the desktop normally.
 
-```bash
-sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea --trigger daily
-```
-
-| Trigger | Behavior |
-| --- | --- |
-| `daily` | One practice session per calendar day, automatically when the desktop is available; follow-up rounds continue until passed. |
-| `unlock` | A new session after each login/unlock; an unfinished session resumes instead of resetting. |
-| `manual` | Open Math Time and choose Start. Once started, practice remains required until completed or ended by a parent. |
-
-All three triggers pause during School Mode. Every session uses the same initial 30-minute round and repeating 15-minute follow-up rules.
+All sessions use the same initial 30-minute round and repeating 15-minute follow-up rules. Daily and login/unlock triggers have been removed; `setup --trigger manual` remains accepted for compatibility with earlier installation commands.
 
 ## Update
 
-Update both the shell plugin and its installed service. Trigger settings and version 1.1/1.2 round progress are retained. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores; days already completed or ended by a parent stay completed. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Version 1.3 changes every enrollment to manual start while preserving version 1.1/1.2 questions, scores and remaining time. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores. Previous completed or parent-ended results are retained, with **Start another session** available. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -128,7 +119,7 @@ systemctl status peterholko-math-time.service --no-pager
 sudo journalctl -u peterholko-math-time.service -b --no-pager -n 40
 ```
 
-If the app reports that the account is not enrolled, rerun setup with its actual username. If an active session loses the service connection, the view retains the requirement and reconnects automatically. Restarting the service or shell does not reset saved progress.
+If the app reports that the account is not enrolled, rerun setup with its actual username. If an active session loses the service connection, the view retains the requirement and reconnects automatically. Restarting the service or shell does not reset saved progress; launch Math Time again to resume. A previous parent-ended result can be followed by **Start another session**, without editing or deleting saved state.
 
 ## Remove
 

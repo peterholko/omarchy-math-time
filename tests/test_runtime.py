@@ -19,11 +19,12 @@ class RuntimeTest(unittest.TestCase):
         self.uid = os.getuid()
         self.user = pwd.getpwuid(self.uid).pw_name
         self.saved = {}
-        self.host = Host({"users": {self.user: {"trigger": "daily"}}}, {},
+        self.host = Host({"users": {self.user: {"trigger": "manual"}}}, {},
                          lambda data: self.saved.update(copy.deepcopy(data)),
                          verifier=lambda password: password == "test-parent-password")
         self.host.tick(0, "2026-09-12", {self.uid: {"active": True, "locked": False,
             "school": False, "session": "test-login"}})
+        self.host.dispatch(self.uid, {"cmd": "start"}, now=0, day="2026-09-12")
 
     def test_only_enrolled_peers_can_read_or_change_their_session(self):
         self.assertEqual(self.host.dispatch(self.uid + 10000, {"cmd": "status"})["error"], "not_enrolled")
@@ -45,11 +46,37 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(self.saved[self.user]["result"], "parent")
         self.assertNotIn("password", str(self.saved))
 
-    def test_installer_preserves_other_users_and_existing_trigger(self):
-        config = {"users": {"other": {"trigger": "manual"}, self.user: {"trigger": "unlock"}}}
-        new = configure(config, self.user, None)
-        self.assertEqual(new["users"], config["users"])
-        self.assertEqual(configure(config, self.user, "daily")["users"][self.user]["trigger"], "daily")
+    def test_installer_migrates_automatic_triggers_and_preserves_other_settings(self):
+        config = {"version": 1, "users": {"other": {"trigger": "daily", "extra": "keep"},
+                                         self.user: {"trigger": "unlock"}}}
+        new = configure(config, self.user)
+        self.assertEqual(new["version"], 2)
+        self.assertEqual(new["users"], {"other": {"trigger": "manual", "extra": "keep"},
+                                        self.user: {"trigger": "manual"}})
+        self.assertEqual(config["users"][self.user]["trigger"], "unlock")
+        self.assertEqual(configure({"users": {}}, self.user)["users"][self.user]["trigger"], "manual")
+
+    def test_old_config_and_root_status_requests_cannot_start_a_new_session(self):
+        for options in ({}, {"trigger": "daily"}, {"trigger": "unlock"}):
+            host = Host({"users": {self.user: options}}, {}, lambda data: None)
+            host.tick(0, "2026-09-12", {self.uid: {"active": True, "locked": False,
+                "school": False, "session": "test-login"}})
+            state = host.dispatch(self.uid, {"cmd": "status"}, now=1, day="2026-09-13")
+            self.assertEqual(state["trigger"], "manual")
+            self.assertFalse(state["required"])
+            self.assertFalse(host.dispatch(0, {"cmd": "status", "uid": self.uid},
+                now=2, day="2026-09-13")["required"])
+
+    def test_start_after_parent_exit_is_saved_as_a_new_session(self):
+        old_session = self.host.models[self.uid].data["session"]
+        ended = self.host.dispatch(0, {"cmd": "parent.end", "uid": self.uid},
+                                  now=1, day="2026-09-12")
+        self.assertEqual(ended["state"]["result"], "parent")
+        started = self.host.dispatch(self.uid, {"cmd": "start"}, now=2, day="2026-09-12")
+        self.assertTrue(started["ok"])
+        self.assertNotEqual(started["state"]["session"], old_session)
+        self.assertEqual(started["state"]["remaining"], 1800)
+        self.assertEqual(self.saved[self.user]["session"], started["state"]["session"])
 
     def test_updates_require_owned_unchanged_files_and_explicit_upgrade(self):
         with tempfile.TemporaryDirectory() as temp:

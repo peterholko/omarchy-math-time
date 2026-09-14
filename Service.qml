@@ -19,7 +19,7 @@ Item {
 
   function apply(response) {
     if (response && response.ok === true) {
-      if (response.version !== 3) {
+      if (response.version !== 4) {
         connected = false
         error = "upgrade_required"
         return
@@ -27,8 +27,9 @@ Item {
       connected = true
       error = ""
       state = response
-      if (state.show && shell) shell.summon("io.github.peterholko.math", '{"resume":true}')
-      else if (state.required && shell) shell.hide("io.github.peterholko.math")
+      // Polling status must never open the app. A user launches it explicitly,
+      // including when resuming saved work after login, unlock or School Mode.
+      if (state.required && !state.show && shell) shell.hide("io.github.peterholko.math")
     } else {
       connected = false
       error = String(response && response.error || "service_unavailable")

@@ -57,11 +57,12 @@ Item {
   function step(action: string): string {
     var watch = Quickshell.processes.find(p => p.command[3] === "watch")
     var control = Quickshell.processes.find(p => p.command[3] === "request")
-    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, version:3, required:true, show:true,
+    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, version:4, required:true, show:true,
       session:"session", question:{id:"question", a:7, b:8}, remaining:1800}))
-    else if (action === "old-service") watch.stdout.read('{"ok":true,"version":2,"required":true}')
+    else if (action === "old-service") watch.stdout.read('{"ok":true,"version":3,"required":true}')
     else if (action === "present") service.setPresence(true)
-    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:3, required:true, show:false, school:true}))
+    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:4, required:true, show:false, school:true}))
+    else if (action === "idle") watch.stdout.read('{"ok":true,"version":4,"required":false,"show":false}')
     else if (action === "offline") watch.stdout.read('{"ok":false,"error":"service_unavailable"}')
     else if (action === "request") service.request({cmd:"parent.end", password:"example-password"})
     else if (action === "reply") { control.stdout.text = '{"ok":false,"error":"bad_password"}'; control.running = false; control.exited(0) }
@@ -90,9 +91,11 @@ Item {
         QTest.qWait(10)
         return json.loads(value)
 
-    def test_status_reopens_practice_and_school_hides_it(self):
-        self.assertEqual(self.step("status")["summons"], ["io.github.peterholko.math"])
+    def test_status_never_opens_app_even_with_unfinished_work(self):
+        self.assertEqual(self.step("idle")["summons"], [])
+        self.assertEqual(self.step("status")["summons"], [])
         self.assertEqual(self.step("school")["hides"], ["io.github.peterholko.math"])
+        self.assertEqual(self.step("status")["summons"], [])
 
     def test_presence_is_deduplicated_to_avoid_a_feedback_loop(self):
         self.step("status")

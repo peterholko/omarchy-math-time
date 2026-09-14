@@ -101,7 +101,7 @@ Rectangle {
     Text {
       width: parent.width
       text: practising ? (sheet.roundNumber === 1 ? "Multiplication tables" : "Extra practice · Round " + sheet.roundNumber)
-        : finished ? "Practice finished!" : "Your multiplication round"
+        : finished ? (sheet.state.result === "parent" ? "Session ended" : "Practice finished!") : "Your multiplication round"
       textFormat: Text.PlainText
       color: Model.PALETTE.ink
       font { family: sheet.family; pixelSize: sheet.compact ? 30 : 40; bold: true }
@@ -113,9 +113,9 @@ Rectangle {
       objectName: "roundScore"
       text: practising ? sheet.answeredCount + "/" + sheet.questionCount + " answered  ·  "
           + sheet.correctCount + " correct  ·  Goal: " + sheet.targetScore
-        : finished ? (sheet.state.result === "parent" ? "An adult ended this session."
+        : finished ? (sheet.state.result === "parent" ? "The previous session was ended by a parent."
           : sheet.state.last_round ? "Round passed: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions + " correct. Well done!"
-          : "Today's practice is finished. Well done!")
+          : "The session is finished. Well done!")
         : "Tables 1–12 · 50 questions · 30 minutes · 40 correct to pass"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 18 }
@@ -204,14 +204,14 @@ Rectangle {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: !sheet.waiting
       text: controller.busy ? "Checking…" : sheet.reviewing ? "Continue" : sheet.guidedRetry ? "Check retry"
-        : practising ? "Check answer" : finished ? "Back to your desktop" : "Start 50-question round"
-      enabled: !controller.busy && (finished || (controller.connected && sheet.state.active === true
-        && sheet.state.school === false && (sheet.reviewing || !practising || controller.answer.length > 0)))
+        : practising ? "Check answer" : finished ? "Start another session" : "Start 50-question round"
+      enabled: !controller.busy && controller.connected && sheet.state.active === true
+        && sheet.state.locked === false && sheet.state.school === false
+        && (sheet.reviewing || !practising || controller.answer.length > 0)
       function activate() {
         if (!enabled) return
         if (sheet.reviewing) controller.acknowledge()
         else if (practising) controller.submit()
-        else if (finished) controller.close()
         else controller.start()
       }
       onClicked: activate()
