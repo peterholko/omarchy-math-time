@@ -61,7 +61,8 @@ Item {
       session:"session", question:{id:"question", a:7, b:8}, remaining:1800}))
     else if (action === "old-service") watch.stdout.read('{"ok":true,"version":3,"required":true}')
     else if (action === "present") service.setPresence(true)
-    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:4, required:true, show:false, school:true}))
+    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:4, required:true, show:true, school:true}))
+    else if (action === "locked") watch.stdout.read(JSON.stringify({ok:true, version:4, required:true, show:false, school:true, locked:true}))
     else if (action === "idle") watch.stdout.read('{"ok":true,"version":4,"required":false,"show":false}')
     else if (action === "offline") watch.stdout.read('{"ok":false,"error":"service_unavailable"}')
     else if (action === "request") service.request({cmd:"parent.end", password:"example-password"})
@@ -94,7 +95,8 @@ Item {
     def test_status_never_opens_app_even_with_unfinished_work(self):
         self.assertEqual(self.step("idle")["summons"], [])
         self.assertEqual(self.step("status")["summons"], [])
-        self.assertEqual(self.step("school")["hides"], ["io.github.peterholko.math"])
+        self.assertEqual(self.step("school")["hides"], [])
+        self.assertEqual(self.step("locked")["hides"], ["io.github.peterholko.math"])
         self.assertEqual(self.step("status")["summons"], [])
 
     def test_presence_is_deduplicated_to_avoid_a_feedback_loop(self):

@@ -28,7 +28,7 @@ Item {
       error = ""
       state = response
       // Polling status must never open the app. A user launches it explicitly,
-      // including when resuming saved work after login, unlock or School Mode.
+      // including when resuming saved work after login or unlock.
       if (state.required && !state.show && shell) shell.hide("io.github.peterholko.math")
     } else {
       connected = false

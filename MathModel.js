@@ -12,7 +12,7 @@ function errorText(error) {
     case "upgrade_required": return "A parent needs to upgrade Math Time's service with setup --upgrade."
     case "bad_password": return "That parent password wasn't accepted. Please try again."
     case "try_later": return "Please wait a moment before trying the parent password again."
-    case "school_or_locked": return "Practice can start in Free Time on an unlocked desktop."
+    case "school_or_locked": return "Practice needs an unlocked desktop and available School Mode status."
     case "use_digits": return "Type your answer using digits."
     case "acknowledgement_required": return "Read the correct answer, then choose Continue."
     case "not_reviewing": return "Answer the question before continuing."

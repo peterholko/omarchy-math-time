@@ -55,7 +55,7 @@ class Practice:
     def usable(self):
         env = self.environment
         return (env.get("active") is True and env.get("locked") is False
-                and env.get("school") is False)
+                and isinstance(env.get("school"), bool))
 
     def begin(self, day):
         # Reopening an unfinished session cannot reset its timer or score.
@@ -112,7 +112,8 @@ class Practice:
         self.last_tick = now
         self.environment = environment
         usable = self.usable()
-        # Never count a lock, suspend, missing view, or School Mode interval.
+        # Both school and free time can host manually started practice.
+        # Never count a lock, suspend, missing view, or unknown school status.
         if (self.data["required"] and usable and previous_usable and previous_tick is not None
                 and self.present_until >= now):
             self.data["elapsed"] = min(self.duration, self.data["elapsed"] + elapsed)
@@ -239,9 +240,7 @@ class Practice:
     def snapshot(self, now):
         env = self.environment
         required = self.data["required"]
-        if env.get("school") is True:
-            pause = "School Mode is on. Open Math Time in Free Time to practise."
-        elif env.get("school") is None:
+        if env.get("school") is None:
             pause = "Waiting for School Mode status."
         elif env.get("locked") is not False or env.get("active") is not True:
             pause = "Practice is paused while the desktop is locked or away."

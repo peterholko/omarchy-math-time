@@ -224,18 +224,17 @@ class PracticeTest(unittest.TestCase):
                 self.assertEqual(self.practice.answer(token, "56")["error"], "stale_question")
                 self.assertEqual(self.practice.acknowledge(token)["error"], "stale_question")
 
-    def test_school_mode_pauses_review_and_does_not_accept_continue(self):
+    def test_school_mode_keeps_review_and_accepts_continue_without_rescoring(self):
         self.answer(False)
         self.answer(False)
         question = copy.deepcopy(self.practice.question())
         self.env = {**DESKTOP, "school": True}
         self.work(30)
-        self.assertEqual(self.practice.data["elapsed"], 0)
-        self.assertEqual(self.practice.acknowledge(question["id"])["error"], "not_practising")
+        self.assertEqual(self.practice.data["elapsed"], 30)
         self.assertEqual(self.practice.question(), question)
-        self.env = dict(DESKTOP)
-        self.work(1)
         self.assertTrue(self.practice.acknowledge(question["id"])["acknowledged"])
+        self.assertEqual(self.practice.data["answered"], 1)
+        self.assertEqual(self.practice.data["correct"], 0)
 
     def test_version_11_round_progress_migrates_without_reset(self):
         for _ in range(7):
@@ -276,8 +275,8 @@ class PracticeTest(unittest.TestCase):
         self.assertEqual(self.practice.data["elapsed"], 123)
         self.assertEqual(self.practice.question(), previous["question"])
 
-    def test_school_lock_missing_status_and_hidden_view_pause_the_clock(self):
-        for change in ({"school": True}, {"school": None}, {"locked": True}, {"active": False}):
+    def test_lock_missing_status_and_hidden_view_pause_the_clock(self):
+        for change in ({"school": None}, {"locked": True}, {"active": False}, {"school": True, "locked": True}):
             with self.subTest(change=change):
                 before = self.practice.data["elapsed"]
                 self.env = {**DESKTOP, **change}
@@ -356,13 +355,48 @@ class PracticeTest(unittest.TestCase):
         self.practice.advance(1000000, "2026-09-11", DESKTOP)
         self.assertFalse(self.practice.data["required"])
 
-    def test_manual_start_is_rejected_during_school_lock_or_missing_status(self):
+    def test_manual_start_is_rejected_during_lock_or_missing_status(self):
         model = Practice()
-        for change in ({"school": True}, {"school": None}, {"locked": True}, {"active": False}):
+        for change in ({"school": None}, {"locked": True}, {"active": False}, {"school": True, "locked": True}):
             with self.subTest(change=change):
                 model.advance(0, DAY, {**DESKTOP, **change})
                 self.assertEqual(model.start(DAY)["error"], "school_or_locked")
                 self.assertFalse(model.data["required"])
+
+    def test_manual_start_is_available_in_both_modes_and_switching_preserves_progress(self):
+        for school in (True, False):
+            with self.subTest(school=school):
+                model = Practice()
+                env = {**DESKTOP, "school": school}
+                model.advance(0, DAY, env)
+                self.assertFalse(model.snapshot(0)["required"])
+                self.assertTrue(model.start(DAY)["ok"])
+                question = model.question()
+                identifier = model.data["session"]
+                self.assertTrue(model.snapshot(0)["show"])
+                self.assertEqual(model.snapshot(0)["pause"], "")
+                model.present(0, identifier, question["id"], True)
+                model.advance(1, DAY, {**env, "school": not school})
+                self.assertEqual(model.data["elapsed"], 1)
+                self.assertEqual(model.question(), question)
+                self.assertEqual(model.data["session"], identifier)
+                self.assertTrue(model.answer(question["id"], str(question["a"] * question["b"]))["correct"])
+                self.assertEqual(model.data["correct"], 1)
+                restored = Practice(model.data)
+                restored.advance(2, DAY, {**env, "school": True})
+                self.assertTrue(restored.snapshot(2)["show"])
+                self.assertEqual(restored.data, model.data)
+
+    def test_school_practice_uses_the_same_round_duration_and_pass_score(self):
+        self.env = {**DESKTOP, "school": True}
+        self.practice.advance(0, DAY, self.env)
+        self.answer_round(40)
+        self.work(DURATION - 1)
+        self.assertTrue(self.practice.data["required"])
+        self.work(1)
+        self.assertFalse(self.practice.data["required"])
+        self.assertEqual(self.practice.data["result"], "complete")
+        self.assertEqual(self.practice.data["last_round"]["correct"], 40)
 
     def test_legacy_queued_automatic_start_is_discarded_without_resetting_progress(self):
         saved = copy.deepcopy(self.practice.data)

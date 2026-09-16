@@ -15,6 +15,8 @@ from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtTest import QTest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "service"))
+from core import Practice
 APP = QGuiApplication.instance() or QGuiApplication([])
 
 
@@ -61,6 +63,10 @@ Item {
     function request(value) { requestValue = value; busy = true; parentBusy = value.cmd === "parent.end" }
   }
   MathTime { id: math; service: probe.service }
+  function setState(raw: string) {
+    service.busy = false
+    service.state = JSON.parse(raw)
+  }
   function step(action: string): string {
     if(action === "open") math.open("{}")
     else if(action === "escape") math.handleEscape()
@@ -77,15 +83,20 @@ Item {
       service.state = Object.assign({}, service.state, {required:false, show:false, result:"parent"})
       service.reply({ok:true, action:"parent.end"})
     } else if(action === "school") {
-      service.state = Object.assign({}, service.state, {show:false, school:true})
+      service.state = Object.assign({}, service.state, {show:service.state.required, school:true})
     } else if(action === "free") {
-      service.state = Object.assign({}, service.state, {show:true, school:false})
+      service.state = Object.assign({}, service.state, {show:service.state.required, school:false})
+    } else if(action === "unknown-school") {
+      service.state = Object.assign({}, service.state, {show:false, school:null})
     } else if(action === "idle") {
       service.busy = false; service.connected = true
       service.state = Object.assign({}, service.state, {required:false, show:false, result:"", question:null,
         school:false, locked:false, active:true})
+      service.requestValue = ({})
     } else if(action === "locked") {
       service.state = Object.assign({}, service.state, {show:false, locked:true})
+    } else if(action === "unlocked") {
+      service.state = Object.assign({}, service.state, {show:service.state.required, locked:false})
     } else if(action === "offline") service.connected = false
     else if(action === "complete") {
       service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, answered:50, correct:40, last_round:{questions:50, correct:40, passed:true}})
@@ -245,10 +256,18 @@ Item {
         self.step("parent")
         self.assertFalse(self.step("parent-ok")["opened"])
 
-    def test_school_pauses_overlay_and_free_time_requires_reopening(self):
-        self.assertFalse(self.step("school")["covering"])
+    def test_school_and_free_time_keep_the_current_practice_open(self):
+        for action in ("school", "free"):
+            self.assertTrue(self.step(action)["covering"])
+            self.assertTrue(self.step("inspect")["present"])
+        self.step("school")
+        self.assertEqual(self.step("answer")["request"]["cmd"], "answer")
+
+    def test_lock_still_pauses_practice_and_requires_manual_reopening(self):
+        self.step("school")
+        self.assertFalse(self.step("locked")["covering"])
         self.assertFalse(self.step("inspect")["present"])
-        self.assertFalse(self.step("free")["covering"])
+        self.assertFalse(self.step("unlocked")["covering"])
         self.assertTrue(self.step("open")["covering"])
 
     def activate_main_action(self):
@@ -273,8 +292,39 @@ Item {
                 self.assertTrue(state["opened"])
                 self.step("correct")
 
-    def test_manual_start_button_requires_available_free_time(self):
-        for action in ("school", "locked", "offline"):
+    def test_manual_start_button_works_in_school_and_free_time(self):
+        for action in ("school", "free"):
+            with self.subTest(action=action):
+                self.step("idle")
+                self.step(action)
+                self.step("open")
+                self.assertTrue(self.view("practiceAction").property("enabled"))
+                self.assertEqual(self.activate_main_action()["request"], {"cmd": "start"})
+
+    def apply_service_state(self, state):
+        self.assertTrue(QMetaObject.invokeMethod(self.probe, "setState", Q_ARG(str, json.dumps(state))))
+        QTest.qWait(10)
+
+    def test_manual_school_start_uses_real_service_state_and_counts_practice(self):
+        model = Practice()
+        environment = {"active": True, "locked": False, "school": True}
+        model.advance(0, "2026-09-16", environment)
+        self.apply_service_state(model.snapshot(0))
+        self.assertEqual(self.step("inspect")["request"], {})
+        self.assertEqual(self.activate_main_action()["request"], {"cmd": "start"})
+        self.assertTrue(model.start("2026-09-16")["ok"])
+        self.apply_service_state(model.snapshot(0))
+        self.assertTrue(self.step("inspect")["covering"])
+        self.assertTrue(self.step("inspect")["present"])
+        self.assertEqual(self.view("practiceAction").property("text"), "Check answer")
+        model.present(0, model.data["session"], model.question()["id"], True)
+        model.advance(1, "2026-09-16", environment)
+        self.apply_service_state(model.snapshot(1))
+        self.assertEqual(model.data["elapsed"], 1)
+        self.assertTrue(self.step("inspect")["covering"])
+
+    def test_manual_start_button_requires_available_unlocked_desktop(self):
+        for action in ("unknown-school", "locked", "offline"):
             with self.subTest(action=action):
                 self.step("idle")
                 self.step(action)

@@ -2,7 +2,7 @@
 
 A manually started, full-screen multiplication app: **50 questions in 30 minutes, with 40 correct to pass**. Open **Math Time** from the app launcher and choose **Start 50-question round**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.3 makes all sessions manual, including existing installations previously configured for daily or login/unlock starts.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.4 allows manually started practice in both **School Mode and Free Time**.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -20,10 +20,10 @@ Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin I
 - The timer keeps running during hints and answer review. At the deadline, a passing score finishes practice. Otherwise, a fresh 15-minute, 25-question round begins. Its score starts at zero and needs 20 correct; this repeats until a round passes. Previous rounds’ scores do not carry over.
 - **Every new session starts manually.** Booting, logging in, unlocking, changing the date or returning to Free Time never opens Math Time or starts a session. Open the app and choose Start when it is time to practise.
 - After passing or a parent ending a session, open Math Time and choose **Start another session** to begin a fresh round, including on the same day. The previous result never blocks a new manual start.
-- Time counts while the practice screen is present on the active, unlocked desktop. Leaving every question unanswered can never pass a round. Parent-password entry, School Mode, locking, suspending and closing the shell pause the clock.
+- Time counts while the practice screen is present on the active, unlocked desktop, in either School Mode or Free Time. Leaving every question unanswered can never pass a round. Parent-password entry, locking, suspending and closing the shell pause the clock.
 - Root-owned progress preserves the current round, question, retry/review step, score and remaining time across logout or reboot. Open Math Time again to resume unfinished work. Offline time does not count, and crossing midnight does not reset a round.
 - Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end the session early, including a follow-up; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
-- If the standalone **School Mode** service is present, practice is unavailable throughout School Mode. Open Math Time again in Free Time to resume. An unavailable status for a known school enrollment also pauses practice. Installing School Mode is optional.
+- Practice can start and continue in **School Mode or Free Time**. Changing modes preserves the current question, score and timer. An unavailable status for a known school enrollment pauses practice until its status is available again. Installing School Mode is optional.
 
 ### Example of a guided retry
 
@@ -48,7 +48,7 @@ install -m 644 \
 omarchy plugin enable io.github.peterholko.math
 ```
 
-After installation, open **Math Time** from the app launcher and choose **Start 50-question round** in Free Time. Enabling the plugin does not open the app or begin practice. No logout or supplementary-group refresh is needed. If Math Time is already installed, use the update instructions below.
+After installation, open **Math Time** from the app launcher and choose **Start 50-question round** in School Mode or Free Time. Enabling the plugin does not open the app or begin practice. No logout or supplementary-group refresh is needed. If Math Time is already installed, use the update instructions below.
 
 The parent override authenticates the existing root password through PAM. On a standard installation without a usable root password, an administrator should set the parent/root password with `sudo passwd root` before enrolling the child. Setup never changes any system password.
 
@@ -70,7 +70,7 @@ omarchy plugin update io.github.peterholko.school-mode --yes &&
 omarchy restart shell
 ```
 
-Math Time remains paused during School Mode. The launcher opens its own practice screen; an unfinished session resumes when you open it again.
+The default School Mode app list includes `io.github.peterholko.math`; a customized school app list must also include that ID to show it in the launcher. The launcher opens Math Time's own practice screen in either mode; an unfinished session resumes when you open it again. Updating Math Time does not change school app approvals.
 
 Open it directly with:
 
@@ -86,7 +86,7 @@ All sessions use the same initial 30-minute round and repeating 15-minute follow
 
 ## Update
 
-Update both the shell plugin and its installed service. Version 1.3 changes every enrollment to manual start while preserving version 1.1/1.2 questions, scores and remaining time. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores. Previous completed or parent-ended results are retained, with **Start another session** available. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Version 1.4 removes the Free Time-only restriction from the Start button and practice service. Sessions still start manually, and existing version 1.1–1.3 questions, scores and remaining time are preserved. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores. Previous completed or parent-ended results are retained, with **Start another session** available. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&

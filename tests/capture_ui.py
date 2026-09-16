@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from PySide6.QtQuick import QQuickWindow
 from PySide6.QtTest import QTest
-from test_ui import APP, UiTest
+from test_ui import APP, UiTest, Practice
 
 
 def main():
@@ -42,6 +42,19 @@ def main():
                 window.contentItem().setHeight(height)
                 QTest.qWait(100)
                 assert window.grabWindow().save(str(args.directory / f"{action}-{width}x{height}.png"))
+        model = Practice()
+        model.advance(0, "2026-09-16", {"active": True, "locked": False, "school": True})
+        test.apply_service_state(model.snapshot(0))
+        test.step("open")
+        assert test.view("practiceAction").property("enabled")
+        QTest.qWait(100)
+        assert window.grabWindow().save(str(args.directory / "school-manual-start.png"))
+        assert test.activate_main_action()["request"] == {"cmd": "start"}
+        assert model.start("2026-09-16")["ok"]
+        test.apply_service_state(model.snapshot(0))
+        assert test.step("inspect")["covering"]
+        QTest.qWait(100)
+        assert window.grabWindow().save(str(args.directory / "school-practice.png"))
     finally:
         test.doCleanups()
 

@@ -206,7 +206,7 @@ Rectangle {
       text: controller.busy ? "Checking…" : sheet.reviewing ? "Continue" : sheet.guidedRetry ? "Check retry"
         : practising ? "Check answer" : finished ? "Start another session" : "Start 50-question round"
       enabled: !controller.busy && controller.connected && sheet.state.active === true
-        && sheet.state.locked === false && sheet.state.school === false
+        && sheet.state.locked === false && typeof sheet.state.school === "boolean"
         && (sheet.reviewing || !practising || controller.answer.length > 0)
       function activate() {
         if (!enabled) return
