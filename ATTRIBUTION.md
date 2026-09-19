@@ -4,4 +4,4 @@ Math Time originated in [Omarchy Kids](https://github.com/peterholko/omarchy-kid
 
 The PAM conversation in `service/auth.py` is adapted from Peter Holko’s MIT-licensed [Screen Time platform](https://github.com/peterholko/omarchy-screen-time-platform). The implementation is included locally; that plugin is not a runtime dependency.
 
-The screenshots show the actual QML view rendered with the portable Qt test adapter. They contain no third-party artwork.
+The screenshots show the actual QML view rendered with the portable Qt test adapter. They contain no third-party artwork. The root `preview.png` shows the current multiplication-practice view with sample values, captured using `tests/capture_ui.py`.

@@ -33,14 +33,14 @@ For **7 × 8**, an incorrect first answer gets the hint **“Work out 7 × 4, th
 
 The overlay covers every connected display and takes keyboard focus. This is a practice requirement within an enabled Omarchy shell plugin, not an OS security boundary: someone with administrator access or permission to disable the plugin can bypass its display. Do not remove the parent’s administrative access.
 
-## Install for Linnea
+## Install
 
-Run from Linnea’s desktop terminal. Only the explicit service setup uses `sudo`; it installs this plugin’s local service and enrolls `linnea`.
+Run from the intended user's Omarchy desktop terminal. Replace `CHILD_USERNAME` with that account's Linux username in the install, update and removal commands. Only the explicit service setup uses `sudo`; it installs this plugin's local service and enrolls the named account.
 
 ```bash
 omarchy pkg add python &&
 omarchy plugin add https://github.com/peterholko/omarchy-math-time --yes &&
-sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea &&
+sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user CHILD_USERNAME &&
 mkdir -p "$HOME/.local/share/applications" &&
 install -m 644 \
   "$HOME/.config/omarchy/plugins/io.github.peterholko.math/io.github.peterholko.math.desktop" \
@@ -90,7 +90,7 @@ Update both the shell plugin and its installed service. Version 1.4 removes the 
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
-sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea --upgrade &&
+sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user CHILD_USERNAME --upgrade &&
 mkdir -p "$HOME/.local/share/applications" &&
 install -m 644 \
   "$HOME/.config/omarchy/plugins/io.github.peterholko.math/io.github.peterholko.math.desktop" \
@@ -127,7 +127,7 @@ An administrator can disable the shell plugin before removing its service enroll
 
 ```bash
 omarchy plugin disable io.github.peterholko.math
-sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user linnea --remove
+sudo "$HOME/.config/omarchy/plugins/io.github.peterholko.math/setup" --user CHILD_USERNAME --remove
 rm -f "$HOME/.local/share/applications/io.github.peterholko.math.desktop"
 omarchy plugin remove io.github.peterholko.math
 ```
