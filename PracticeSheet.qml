@@ -17,6 +17,8 @@ Rectangle {
   readonly property bool guidedRetry: practising && !!sheet.state.question && sheet.state.question.stage === "retry"
   readonly property bool reviewing: practising && !!sheet.state.question && sheet.state.question.stage === "reveal"
   readonly property bool finished: !practising && (sheet.state.result === "complete" || sheet.state.result === "parent")
+  readonly property var earnedMedal: finished && sheet.state.result === "complete" && sheet.state.last_round
+    && sheet.state.last_round.passed === true ? Model.medal(sheet.state.last_round.medal) : null
   readonly property bool compact: height < 850
   readonly property string family: Style.font.family
   color: Model.PALETTE.paper
@@ -108,17 +110,61 @@ Rectangle {
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
     }
+    Column {
+      objectName: "roundMedal"
+      visible: sheet.earnedMedal !== null
+      width: parent.width
+      spacing: 8
+      MedalBadge {
+        objectName: "medalBadge"
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: sheet.compact ? 144 : 160
+        height: sheet.compact ? 153 : 170
+        medal: sheet.earnedMedal ? sheet.state.last_round.medal : "gold"
+      }
+      Text {
+        objectName: "medalTitle"
+        width: parent.width
+        text: sheet.earnedMedal ? sheet.earnedMedal.name + " medal!" : ""
+        textFormat: Text.PlainText
+        color: sheet.earnedMedal ? sheet.earnedMedal.dark : Model.PALETTE.ink
+        font { family: sheet.family; pixelSize: 28; bold: true }
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+      }
+      Text {
+        objectName: "medalMessage"
+        width: parent.width
+        text: sheet.earnedMedal ? sheet.state.last_round.wrong + " wrong · " + sheet.earnedMedal.message : ""
+        textFormat: Text.PlainText
+        color: Model.PALETTE.inkSoft
+        font { family: sheet.family; pixelSize: 18 }
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+      }
+    }
     Text {
       width: parent.width
       objectName: "roundScore"
       text: practising ? sheet.answeredCount + "/" + sheet.questionCount + " answered  ·  "
           + sheet.correctCount + " correct  ·  Goal: " + sheet.targetScore
         : finished ? (sheet.state.result === "parent" ? "The previous session was ended by a parent."
-          : sheet.state.last_round ? "Round passed: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions + " correct. Well done!"
+          : sheet.state.last_round ? "Round " + (sheet.state.last_round.number || sheet.roundNumber) + " passed: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions + " correct. Well done!"
           : "The session is finished. Well done!")
         : "Tables 1–12 · 50 questions · 30 minutes · 40 correct to pass"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 18 }
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
+    }
+    Text {
+      objectName: "medalGoals"
+      visible: !practising && !finished
+      width: parent.width
+      text: "Round medals: Gold · 0 wrong    Silver · 1 wrong    Bronze · 2 wrong"
+      textFormat: Text.PlainText
+      color: Model.PALETTE.inkSoft
+      font { family: sheet.family; pixelSize: 17 }
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
     }

@@ -2,7 +2,7 @@
 
 A manually started, full-screen multiplication app: **50 questions in 30 minutes, with 40 correct to pass**. Open **Math Time** from the app launcher and choose **Start 50-question round**. If the score is lower, repeat **15-minute rounds of 25 questions, with 20 correct to pass**, until a round succeeds. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Version 1.4 allows manually started practice in both **School Mode and Free Time**.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Practice starts manually in both **School Mode and Free Time**. Version **1.5** adds gold, silver and bronze medals for accurate rounds.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -30,6 +30,22 @@ Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin I
 For **7 × 8**, an incorrect first answer gets the hint **“Work out 7 × 4, then double it.”** The answer remains hidden while the child tries once more. If that retry is also incorrect, the app reveals **7 × 8 = 56** and waits for Continue. Only the first answer contributes to the round’s passing score.
 
 ![A strategy hint before the one unscored retry](docs/guided-retry.png)
+
+### Round medals
+
+The result screen awards a medal when a round finishes:
+
+| Medal | Wrong questions | First round | Follow-up round |
+| --- | --- | --- | --- |
+| Gold | 0 | 50/50 correct | 25/25 correct |
+| Silver | 1 | 49/50 correct | 24/25 correct |
+| Bronze | 2 | 48/50 correct | 23/25 correct |
+
+Medals use the round's first-answer score. A wrong first answer still counts as one wrong question after a retry, even if the retry is also wrong. Unanswered questions count as wrong at the deadline. A score with three or more wrong questions can still pass under the existing 40/50 or 20/25 rule, without a medal. Each follow-up round earns its own result; mistakes from the previous round do not lower its medal.
+
+The award appears after the full round timer ends. Ending a session early with the parent password does not award a medal. The last completed result and its medal are saved across closing the app, logout and reboot, until a new session starts. Existing saved first-answer results gain the matching medal after upgrading. Medals are visual rewards and do not change screen time or round durations.
+
+![Math Time showing a gold medal for a perfect 50-question round](docs/gold-medal.png)
 
 The overlay covers every connected display and takes keyboard focus. This is a practice requirement within an enabled Omarchy shell plugin, not an OS security boundary: someone with administrator access or permission to disable the plugin can bypass its display. Do not remove the parent’s administrative access.
 
@@ -86,7 +102,7 @@ All sessions use the same initial 30-minute round and repeating 15-minute follow
 
 ## Update
 
-Update both the shell plugin and its installed service. Version 1.4 removes the Free Time-only restriction from the Start button and practice service. Sessions still start manually, and existing version 1.1–1.3 questions, scores and remaining time are preserved. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores. Previous completed or parent-ended results are retained, with **Start another session** available. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Version 1.5 adds round medals and requires the updated service; an older service produces an upgrade message until setup is rerun. Sessions still start manually in either mode, and existing version 1.1–1.4 questions, scores and remaining time are preserved. An unfinished version 1.0 session starts a fresh 50-question round, because the old timer did not record first-answer scores. Previous completed or parent-ended results are retained, with **Start another session** available. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -142,7 +158,7 @@ python3 tests/capture_ui.py /tmp/math-time-previews
 omarchy plugin validate .
 ```
 
-Tests cover the 40/50 and 20/25 thresholds, full round durations, repeated follow-ups, unanswered questions, deadline boundaries, all table facts, guided retries, answer acknowledgement, first-answer scoring, incorrect/replayed answers, pause/resume, reboot and version 1.0 migration, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
+Tests cover the 40/50 and 20/25 thresholds, full round durations, repeated follow-ups, unanswered questions, deadline boundaries, all table facts, guided retries, answer acknowledgement, first-answer scoring, medal thresholds and persistence, parent exits without awards, incorrect/replayed answers, pause/resume, reboot and version 1.0 migration, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
 
 ## License
 

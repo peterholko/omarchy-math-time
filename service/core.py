@@ -3,13 +3,20 @@ import copy
 import secrets
 
 POLICY_VERSION = 2
-API_VERSION = 4
+API_VERSION = 5
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
 RETRY_QUESTION_COUNT = 25
 PASS_SCORE = 40
 RETRY_PASS_SCORE = 20
+
+
+def round_medal(result):
+    """Reward the recorded first-answer score, including unanswered questions."""
+    if not result or result.get("passed") is not True:
+        return ""
+    return {0: "gold", 1: "silver", 2: "bronze"}.get(result["questions"] - result["correct"], "")
 
 
 class Practice:
@@ -39,6 +46,12 @@ class Practice:
             if saved and self.data["required"]:
                 self.data["migration_note"] = "Updated practice: a fresh 50-question round starts now."
         self.data.setdefault("migration_note", "")
+        if self.data.get("last_round"):
+            # Version 1.1+ already saved the complete first-answer result.
+            # Add its award without resetting or starting any practice.
+            result = self.data["last_round"]
+            result["wrong"] = result["questions"] - result["correct"]
+            result["medal"] = round_medal(result)
 
     @property
     def duration(self):
@@ -90,7 +103,9 @@ class Practice:
         passed = self.data["correct"] >= self.pass_score
         self.data["last_round"] = {"number": self.data["round"], "duration": self.duration,
             "questions": self.question_count, "target": self.pass_score,
-            "answered": self.data["answered"], "correct": self.data["correct"], "passed": passed}
+            "answered": self.data["answered"], "correct": self.data["correct"], "passed": passed,
+            "wrong": self.question_count - self.data["correct"]}
+        self.data["last_round"]["medal"] = round_medal(self.data["last_round"])
         self.data["question"] = None
         self.present_until = 0
         if passed:

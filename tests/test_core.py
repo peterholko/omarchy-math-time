@@ -68,6 +68,80 @@ class PracticeTest(unittest.TestCase):
                 else:
                     self.assertEqual(self.practice.data["result"], "complete")
 
+    def test_medals_for_zero_one_or_two_wrong_in_initial_and_follow_up_rounds(self):
+        for follow_up in (False, True):
+            for wrong, medal in ((0, "gold"), (1, "silver"), (2, "bronze"), (3, "")):
+                with self.subTest(follow_up=follow_up, wrong=wrong):
+                    self.setUp()
+                    if follow_up:
+                        self.answer_round(39)
+                        self.work(DURATION)
+                        self.assertEqual(self.practice.data["last_round"]["medal"], "")
+                    self.answer_round(self.practice.question_count - wrong)
+                    self.work(self.practice.duration - 1)
+                    self.assertTrue(self.practice.data["required"])
+                    # No award is granted just for finishing the questions.
+                    self.assertEqual((self.practice.data["last_round"] or {}).get("medal", ""), "")
+                    self.work(1)
+                    result = self.practice.snapshot(self.now)["last_round"]
+                    self.assertEqual(result["medal"], medal)
+                    self.assertEqual(result["wrong"], wrong)
+                    self.assertTrue(result["passed"])
+                    self.assertFalse(self.practice.data["required"])
+
+    def test_wrong_retry_is_still_one_wrong_question_for_medals(self):
+        self.answer(False)
+        self.answer(False)
+        question = self.practice.question()
+        self.assertEqual(question["stage"], "reveal")
+        self.practice.acknowledge(question["id"])
+        for _ in range(49):
+            self.answer()
+        self.work(DURATION)
+        self.assertEqual(self.practice.data["last_round"]["medal"], "silver")
+        self.assertEqual(self.practice.data["last_round"]["wrong"], 1)
+
+    def test_unanswered_questions_cannot_improve_medal(self):
+        for unanswered, medal in ((1, "silver"), (2, "bronze"), (3, ""), (50, "")):
+            with self.subTest(unanswered=unanswered):
+                self.setUp()
+                for _ in range(50 - unanswered):
+                    self.answer()
+                self.work(DURATION)
+                self.assertEqual(self.practice.data["last_round"]["medal"], medal)
+                self.assertEqual(self.practice.data["last_round"]["wrong"], unanswered)
+
+    def test_medal_survives_reload_and_starting_again_clears_the_previous_result(self):
+        self.answer_round(50)
+        self.work(DURATION)
+        restored = Practice(self.practice.data)
+        self.assertEqual(restored.snapshot(0)["last_round"]["medal"], "gold")
+        self.assertFalse(restored.data["required"])
+        restored.advance(0, DAY, self.env)
+        self.assertTrue(restored.start(DAY)["ok"])
+        self.assertIsNone(restored.snapshot(0)["last_round"])
+
+    def test_existing_scored_results_gain_medals_without_resetting_saved_work(self):
+        self.answer_round(48)
+        self.work(DURATION)
+        saved = copy.deepcopy(self.practice.data)
+        saved["last_round"].pop("medal")
+        saved["last_round"].pop("wrong")
+        restored = Practice(saved)
+        self.assertEqual(restored.data["last_round"]["medal"], "bronze")
+        self.assertEqual(restored.data["last_round"]["wrong"], 2)
+        self.assertFalse(restored.data["required"])
+        self.assertEqual(restored.data["session"], saved["session"])
+        self.assertEqual(restored.data["elapsed"], DURATION)
+
+    def test_parent_ending_a_perfect_unfinished_round_does_not_award_a_medal(self):
+        self.answer_round(50)
+        self.work(DURATION - 1)
+        self.practice.end_by_parent(DAY)
+        self.work(2)
+        self.assertEqual(self.practice.data["result"], "parent")
+        self.assertIsNone(self.practice.snapshot(self.now)["last_round"])
+
     def test_retry_rounds_repeat_independently_until_20_of_25_pass(self):
         self.answer_round(39)
         self.work(DURATION)

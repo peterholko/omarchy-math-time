@@ -55,6 +55,17 @@ def main():
         assert test.step("inspect")["covering"]
         QTest.qWait(100)
         assert window.grabWindow().save(str(args.directory / "school-practice.png"))
+        for wrong, medal in ((0, "gold"), (1, "silver"), (2, "bronze")):
+            for follow_up in (False, True):
+                test.apply_service_state(test.completed_model(wrong, follow_up).snapshot(0))
+                test.step("open")
+                for width, height in ((1280, 720), (800, 600)):
+                    window.resize(width, height)
+                    window.contentItem().setWidth(width)
+                    window.contentItem().setHeight(height)
+                    QTest.qWait(100)
+                    suffix = "follow-up" if follow_up else "first"
+                    assert window.grabWindow().save(str(args.directory / f"{medal}-{suffix}-{width}x{height}.png"))
     finally:
         test.doCleanups()
 

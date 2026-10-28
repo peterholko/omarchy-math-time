@@ -30,7 +30,7 @@ class UiTest(unittest.TestCase):
             path = self.base / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
-        for name in ("PracticeSheet.qml", "MathModel.js"):
+        for name in ("PracticeSheet.qml", "MedalBadge.qml", "MathModel.js"):
             shutil.copyfile(ROOT / name, self.base / name)
         qml = (ROOT / "MathTime.qml").read_text()
         qml = "\n".join(line for line in qml.splitlines() if "WlrLayershell." not in line and "exclusionMode:" not in line)
@@ -49,7 +49,7 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:4, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
+    property var state: ({version:5, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
       round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
       question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
@@ -199,6 +199,71 @@ Item {
     def test_result_screen_shows_the_passed_round_score(self):
         self.step("complete")
         self.assertIn("40/50 correct", self.view("roundScore").property("text"))
+        self.assertFalse(self.view("roundMedal").isVisible())
+
+    def completed_model(self, wrong, follow_up=False):
+        model = Practice()
+        model.advance(0, "2026-10-27", {"active": True, "locked": False, "school": True})
+        model.start("2026-10-27")
+        if follow_up:
+            model.finish_round()
+        for index in range(model.question_count):
+            question = model.question()
+            solution = str(question["a"] * question["b"])
+            model.answer(question["id"], "999" if index < wrong else solution)
+            if index < wrong:
+                model.answer(model.question()["id"], solution)
+        model.data["elapsed"] = model.duration
+        model.finish_round()
+        return model
+
+    def test_all_medals_use_server_results_and_remain_visible_after_reopening(self):
+        for wrong, name in ((0, "Gold"), (1, "Silver"), (2, "Bronze")):
+            for follow_up in (False, True):
+                with self.subTest(wrong=wrong, follow_up=follow_up):
+                    model = self.completed_model(wrong, follow_up)
+                    self.apply_service_state(model.snapshot(0))
+                    self.step("open")
+                    self.assertTrue(self.view("roundMedal").isVisible())
+                    self.assertEqual(self.view("medalTitle").property("text"), name + " medal!")
+                    self.assertEqual(self.view("medalBadge").property("medal"), name.lower())
+                    self.assertIn(str(wrong) + " wrong", self.view("medalMessage").property("text"))
+                    questions = 25 if follow_up else 50
+                    self.assertIn(f"{questions - wrong}/{questions} correct", self.view("roundScore").property("text"))
+                    self.step("close")
+                    self.step("open")
+                    self.assertTrue(self.view("roundMedal").isVisible())
+                    self.assertEqual(self.activate_main_action()["request"], {"cmd": "start"})
+
+    def test_no_medal_during_practice_parent_exit_or_a_pass_with_more_mistakes(self):
+        model = self.completed_model(0)
+        self.apply_service_state(model.snapshot(0))
+        self.assertTrue(self.view("roundMedal").isVisible())
+        self.step("parent-ok")
+        self.step("open")
+        self.assertFalse(self.view("roundMedal").isVisible())
+        for action in ("idle", "waiting", "guided", "retry"):
+            # Begin from the normal active fixture, without a completion flag.
+            practice = Practice()
+            practice.advance(0, "2026-10-27", {"active": True, "locked": False, "school": False})
+            practice.start("2026-10-27")
+            self.apply_service_state(practice.snapshot(0))
+            self.step(action)
+            self.assertFalse(self.view("roundMedal").isVisible(), action)
+        self.apply_service_state(self.completed_model(3).snapshot(0))
+        self.assertFalse(self.view("roundMedal").isVisible())
+        self.assertIn("47/50 correct", self.view("roundScore").property("text"))
+
+    def test_medal_goals_are_shown_before_starting_but_not_under_questions(self):
+        self.step("idle")
+        self.assertTrue(self.view("medalGoals").isVisible())
+        for label in ("Gold · 0 wrong", "Silver · 1 wrong", "Bronze · 2 wrong"):
+            self.assertIn(label, self.view("medalGoals").property("text"))
+        model = Practice()
+        model.advance(0, "2026-10-27", {"active": True, "locked": False, "school": False})
+        model.start("2026-10-27")
+        self.apply_service_state(model.snapshot(0))
+        self.assertFalse(self.view("medalGoals").isVisible())
 
     def test_answers_reach_verifier_and_cannot_dismiss_an_active_session(self):
         state = self.step("answer")
