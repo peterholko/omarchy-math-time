@@ -3,7 +3,7 @@ import copy
 import secrets
 
 POLICY_VERSION = 2
-API_VERSION = 6
+API_VERSION = 7
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
@@ -57,6 +57,9 @@ class Practice:
             result["medal"] = round_medal(result)
             if result["passed"]:
                 self.data["stage_results"].setdefault(result["stage"], copy.deepcopy(result))
+        # Older releases saved a waiting screen after all multiplication
+        # questions. Advance that unfinished session without erasing work.
+        self.finish_answered_multiplication()
 
     @property
     def first_multiplication_round(self):
@@ -117,6 +120,7 @@ class Practice:
         passed = self.data["correct"] >= self.pass_score
         stage = self.data["stage"]
         self.data["last_round"] = {"stage": stage, "number": self.data["round"], "duration": self.duration,
+            "elapsed": self.data["elapsed"],
             "questions": self.question_count, "target": self.pass_score,
             "answered": self.data["answered"], "correct": self.data["correct"], "passed": passed,
             "wrong": self.question_count - self.data["correct"]}
@@ -141,6 +145,13 @@ class Practice:
                              answered=0, correct=0, streak=0, migration_note="")
             self.question()
         return not self.data["required"]
+
+    def finish_answered_multiplication(self):
+        if (self.data["required"] and self.data["stage"] == "multiplication"
+                and self.data["answered"] >= self.question_count and not self.data.get("question")):
+            self.finish_round()
+            return True
+        return False
 
     def advance(self, now, day, environment):
         now = max(now, self.last_tick) if self.last_tick is not None else now
@@ -196,8 +207,8 @@ class Practice:
             # The original answer already fixed the score. The retry is only
             # for learning, regardless of whether it succeeds.
             if correct:
-                self.next_question()
-                return {"ok": True, "correct": True, "scored": False,
+                finished = self.next_question()
+                return {"ok": True, "correct": True, "scored": False, "round_finished": finished,
                         "hint": "That's it! " + fact + ". Your score stays the same."}
             self.data["question"] = {**question, "id": secrets.token_hex(16),
                 "stage": "reveal", "solution": solution}
@@ -222,13 +233,18 @@ class Practice:
                                      "stage": "retry", "hint": hint}
             self.present_until = 0
             return {"ok": True, "correct": False, "scored": True, "hint": hint}
-        self.next_question()
-        return {"ok": True, "correct": True, "scored": True, "hint": "Correct! " + fact}
+        finished = self.next_question()
+        return {"ok": True, "correct": True, "scored": True, "round_finished": finished, "hint": "Correct! " + fact}
 
     def next_question(self):
         self.data["question"] = None
         self.present_until = 0
+        # Keep the final question's guided retry/review before moving on,
+        # but never wait for the remaining multiplication time afterwards.
+        if self.finish_answered_multiplication():
+            return True
         self.question()
+        return False
 
     def acknowledge(self, identifier):
         if not self.data["required"] or not self.usable():
@@ -238,8 +254,8 @@ class Practice:
             return {"ok": False, "error": "stale_question"}
         if question["stage"] != "reveal":
             return {"ok": False, "error": "not_reviewing"}
-        self.next_question()
-        return {"ok": True, "acknowledged": True}
+        finished = self.next_question()
+        return {"ok": True, "acknowledged": True, "round_finished": finished}
 
     @staticmethod
     def guided_hint(a, b):

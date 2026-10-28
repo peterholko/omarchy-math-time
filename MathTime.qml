@@ -89,6 +89,12 @@ Item {
       if (response.action === "parent.end") {
         if (response.ok) { root.opened = false; root.parentOpen = false }
         else root.parentNote = Model.errorText(response.error)
+      } else if (response.round_finished === true) {
+        // The reply carries the previous round's last answer. Its feedback
+        // must not appear under the first question of the next round.
+        root.wrong = false
+        root.feedback = ""
+        root.answer = ""
       } else if (response.correct !== undefined) {
         root.wrong = !response.correct
         root.feedback = response.hint || (response.correct ? "Correct! Keep going." : "Keep going. You can learn this one.")

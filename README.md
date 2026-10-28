@@ -1,10 +1,10 @@
 # Math Time
 
-A manually started, full-screen tables app with two stages: **multiplication, then division**. Start with **50 multiplication questions in 30 minutes, with 40 correct to pass**, then complete **25 division questions in 15 minutes, with 20 correct to pass**. A failed round repeats its own stage with 25 questions over 15 minutes until at least 20 are correct. Passing both stages on the first round takes **45 minutes**. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
+A manually started, full-screen tables app with two stages: **multiplication, then division**. Start with **50 multiplication questions in up to 30 minutes, with 40 correct to pass**. Completing those questions with a passing score starts division immediately: **25 questions in 15 minutes, with 20 correct to pass**. A failed round repeats its own stage with 25 questions and a 15-minute limit until at least 20 are correct. Math Time has its own questions, timer, saved progress and parent-password override. It neither requires Screen Time nor earns, spends or changes screen-time minutes.
 
-Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Practice starts manually in both **School Mode and Free Time**. Version **1.6** adds the division stage and preserves separate gold, silver and bronze medals for each stage.
+Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Practice starts manually in both **School Mode and Free Time**, with separate gold, silver and bronze medals for each stage.
 
-Version **1.6.1** makes the Stage 2 countdown explicit and prevents Space after the last answer from accidentally opening the parent override.
+Version **1.7** starts Stage 2 as soon as the multiplication round is complete and passed. There is no wait for the remaining multiplication time and no parent password needed to advance.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -12,16 +12,17 @@ Version **1.6.1** makes the Stage 2 countdown explicit and prevents Space after 
 
 | Stage / round | Time | Questions | Correct answers needed |
 | --- | --- | --- | --- |
-| Stage 1: multiplication, first round | 30 minutes | 50 | At least 40 |
-| Multiplication follow-up, if needed | 15 minutes | 25 | At least 20 |
+| Stage 1: multiplication, first round | Up to 30 minutes | 50 | At least 40 |
+| Multiplication follow-up, if needed | Up to 15 minutes | 25 | At least 20 |
 | Stage 2: division, first round | 15 minutes | 25 | At least 20 |
 | Division follow-up, if needed | 15 minutes | 25 | At least 20 |
 
 - Multiplication tables **1–12**, followed by exact division facts from the same tables: for example, **56 ÷ 7**, **72 ÷ 8**, and **144 ÷ 12**. Divisors and answers range from 1 to 12; there are no remainders or division by zero. Each stage shuffles its own 144-fact deck, and every fact appears before that stage's deck repeats, including across follow-up rounds.
 - Each question is scored on its **first valid answer**. A correct answer advances. An incorrect answer stays on screen with a strategy hint and **one unscored retry**.
 - If the retry is correct, the app confirms it and advances. If it is still incorrect, the app shows the correct equation and waits for **Continue** (or Enter). The original score stays unchanged in either case; retries are part of the same question and do not use another slot in the 50- or 25-question quota.
-- Each round lasts its full time. After the question quota and any final retry/review are finished, the score stays visible until the timer ends; the app does not ask more questions in that round. Unanswered questions count as incorrect at the deadline.
-- The timer keeps running during hints and answer review. At the deadline, passing multiplication moves directly into division and keeps the practice screen open. Passing division finishes the session. A failed round starts another 15-minute, 25-question round of the same operation. Its score starts at zero and needs 20 correct; this repeats until that stage passes. A failed division round never sends the child back to multiplication.
+- Multiplication ends as soon as its question quota and any final retry/review are finished, or when its time limit expires. With a passing score, division starts immediately and keeps the practice screen open. Otherwise, another multiplication round starts immediately with 25 questions and up to 15 minutes. Reaching 40 correct early does not skip the remaining questions.
+- Division rounds still last the full 15 minutes. After the question quota and any final retry/review are finished, the score stays visible until the timer ends; the app does not ask more questions in that round. Passing division finishes the session. A failed division round starts another 15-minute, 25-question division round; it never sends the child back to multiplication.
+- The timer keeps running during hints and answer review. Unanswered questions count as incorrect at the deadline. Each follow-up round starts its score at zero and needs 20 correct; follow-ups repeat until that stage passes.
 - **Every new session starts manually.** Booting, logging in, unlocking, changing the date or returning to Free Time never opens Math Time or starts a session. Open the app and choose Start when it is time to practise.
 - After passing or a parent ending a session, open Math Time and choose **Start another session** to begin a fresh round, including on the same day. The previous result never blocks a new manual start.
 - Time counts while the practice screen is present on the active, unlocked desktop, in either School Mode or Free Time. Leaving every question unanswered can never pass a round. Parent-password entry, locking, suspending and closing the shell pause the clock.
@@ -31,11 +32,9 @@ Version **1.6.1** makes the Stage 2 countdown explicit and prevents Space after 
 
 ### Moving from multiplication to division
 
-Finishing all 50 multiplication questions does not skip the remaining time. With at least 40 correct, the screen shows **“Stage 2 · Division starts in …”** and moves into division automatically when the full 30-minute round ends. No parent password or button press is needed. Multiplication follow-ups use the same transition after their 15-minute timer ends.
+Finish all 50 multiplication questions with at least 40 correct and **Stage 2 · Division starts immediately**, even with time remaining. Multiplication follow-ups do the same after 25 questions with at least 20 correct. If the final first answer is wrong, finish its guided retry or answer review before moving on. No parent password is needed.
 
-The parent-password screen is only for ending practice early, and its timer is paused. If you opened it while waiting for division, choose **Back to practice** or press Escape to return and resume the countdown. Entering the parent password ends the session instead of advancing to division.
-
-![Waiting for the division stage without a parent-password prompt](docs/stage-countdown.png)
+The parent-password screen is only for ending practice early, and its timer is paused. If it is open, choose **Back to practice** or press Escape to return. Entering the parent password ends the session instead of advancing to division.
 
 ### Example of a guided retry
 
@@ -49,7 +48,7 @@ For **56 ÷ 7**, an incorrect first answer gets **“Think: 7 × what number mak
 
 ### Round medals
 
-Each stage awards its own medal when a passing round's full timer finishes:
+Each stage awards its own medal when a passing round finishes: immediately after completing multiplication, or at its time limit; division awards its medal when its timer ends.
 
 | Medal | Wrong questions | First multiplication round | Division or a follow-up round |
 | --- | --- | --- | --- |
@@ -114,11 +113,11 @@ omarchy-shell shell summon io.github.peterholko.math '{}'
 
 Open **Math Time** from the launcher, or use the command above. Choose **Start 50-question round** for a new session or **Start another session** after a previous result. If a session is unfinished, reopening the app resumes it without resetting its score or timer. Once started, it must be completed or ended with the parent password before returning to the desktop normally.
 
-All new sessions start with the 30-minute multiplication round, followed by the 15-minute division stage, with 15-minute follow-ups wherever needed. There is no child-facing stage picker or skip action. Daily and login/unlock triggers have been removed; `setup --trigger manual` remains accepted for compatibility with earlier installation commands.
+All new sessions start with multiplication for up to 30 minutes, followed by the 15-minute division stage. Follow-ups allow up to 15 minutes for multiplication and the full 15 minutes for division. There is no child-facing stage picker or skip action. Daily and login/unlock triggers have been removed; `setup --trigger manual` remains accepted for compatibility with earlier installation commands.
 
 ## Update
 
-Update both the shell plugin and its installed service. Version 1.6 requires the updated service; an older service produces an upgrade message until setup is rerun. Sessions still start manually in either mode. Existing version 1.1–1.5 unfinished multiplication questions, scores and remaining time are preserved, and division follows when that stage passes. Already completed or parent-ended sessions stay finished: upgrading does not start division automatically or invent a division reward. Choose **Start another session** for the new two-stage flow. An unfinished version 1.0 session starts a fresh 50-question round because the old timer did not record first-answer scores. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Version 1.7 requires the updated service; an older service produces an upgrade message until setup is rerun. Sessions still start manually in either mode. Existing version 1.1–1.6 unfinished questions, scores and remaining time are preserved. A saved multiplication round already waiting after its final question advances immediately on upgrade, keeping its score and medal; a final guided retry or review still needs to be completed. Already completed or parent-ended sessions stay finished: upgrading does not start division automatically or invent a division reward. Choose **Start another session** for the new two-stage flow. An unfinished version 1.0 session starts a fresh 50-question round because the old timer did not record first-answer scores. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -174,7 +173,7 @@ python3 tests/capture_ui.py /tmp/math-time-previews
 omarchy plugin validate .
 ```
 
-Tests cover the 40/50 and 20/25 thresholds, the multiplication-to-division transition, full round durations, repeated follow-ups in each stage, unanswered questions, deadline boundaries, all 144 facts for each operation, guided retries, answer acknowledgement, first-answer scoring, independent stage medals and persistence, parent overrides, incorrect/replayed answers, pause/resume, reboot and upgrades from earlier releases, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
+Tests cover the 40/50 and 20/25 thresholds, immediate multiplication completion and follow-ups, the multiplication-to-division transition, division's full round durations, repeated follow-ups in each stage, unanswered questions, deadline boundaries, all 144 facts for each operation, guided retries, answer acknowledgement, first-answer scoring, independent stage medals and persistence, parent overrides, incorrect/replayed answers, pause/resume, reboot and upgrades from earlier releases, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
 
 ## License
 

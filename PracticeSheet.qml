@@ -151,7 +151,7 @@ Rectangle {
           + sheet.correctCount + " correct  ·  Goal: " + sheet.targetScore
         : finished ? (sheet.state.result === "parent" ? "The session was ended by a parent. Completed stage rewards are saved."
           : sheet.stageResults.division ? "Both stages passed. Well done!" : "Multiplication passed. Well done!")
-        : "Tables 1–12 · Stage 1: 50 questions in 30 minutes, 40 correct\nStage 2: 25 questions in 15 minutes, 20 correct"
+        : "Tables 1–12 · Stage 1: 50 questions, 40 correct, up to 30 minutes\nStage 2: 25 questions in 15 minutes, 20 correct"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 18 }
       horizontalAlignment: Text.AlignHCenter
@@ -185,10 +185,10 @@ Rectangle {
       objectName: "practiceCountdown"
       visible: practising
       width: parent.width
-      text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
-          ? (sheet.division ? "Practice finishes in " : "Stage 2 · Division starts in ")
-          : "Next " + sheet.stageName.toLowerCase() + " round starts in ") + Model.clock(sheet.state.remaining)
-        : Model.clock(sheet.state.remaining) + " left in this round"
+      text: sheet.waiting ? (!sheet.division
+          ? (sheet.correctCount >= sheet.targetScore ? "Starting Stage 2 · Division…" : "Starting another multiplication round…")
+          : (sheet.correctCount >= sheet.targetScore ? "Practice finishes in " : "Next division round starts in ") + Model.clock(sheet.state.remaining))
+        : Model.clock(sheet.state.remaining) + (sheet.division ? " left in this round" : " left to answer")
       color: sheet.waiting ? Model.PALETTE.ink : Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: sheet.waiting ? 24 : 19; bold: sheet.waiting }
       horizontalAlignment: Text.AlignHCenter
@@ -274,8 +274,9 @@ Rectangle {
       visible: practising && !sheet.guidedRetry && !sheet.reviewing && text.length > 0
       text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
           ? (sheet.division ? "You reached your goal! Practice finishes automatically when this timer ends."
-            : "You reached your goal! Stage 2 starts automatically when the timer ends. No parent password is needed.")
-          : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
+            : "You reached your goal! Your multiplication answers are saved. Division starts automatically.")
+          : (sheet.division ? "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct."
+            : "Try 25 more multiplication questions. Aim for 20 correct to reach division."))
         : sheet.state.last_round && !sheet.state.last_round.passed
           ? "Last round: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions
             + ". Aim for 20/25 this round to " + (sheet.division ? "finish." : "reach division.")

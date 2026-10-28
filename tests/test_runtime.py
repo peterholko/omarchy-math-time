@@ -130,14 +130,34 @@ class RuntimeTest(unittest.TestCase):
         result = self.host.dispatch(self.uid, {"cmd": "answer", "question": q["id"],
             "answer": str(q["a"] * q["b"])}, now=0.5, day="2026-09-12")
         self.assertTrue(result["correct"])
-        self.assertEqual(result["state"]["correct"], 40)
-        model.present(0.5, model.data["session"], "", True)
+        self.assertTrue(result["round_finished"])
+        self.assertEqual(result["state"]["stage"], "division")
+        self.assertEqual(result["state"]["stage_results"]["multiplication"]["correct"], 40)
+        self.assertEqual(result["state"]["stage_results"]["multiplication"]["elapsed"], 1799.5)
         result = self.host.dispatch(self.uid, {"cmd": "status"}, now=1, day="2026-09-12")
         self.assertTrue(result["required"])
         self.assertEqual(result["stage"], "division")
         self.assertEqual(result["stage_results"]["multiplication"]["correct"], 40)
         self.assertEqual(self.saved[self.user]["stage"], "division")
         self.assertEqual(self.saved[self.user]["elapsed"], 0)
+
+    def test_fiftieth_answer_starts_division_and_is_saved_in_the_same_request(self):
+        model = self.host.models[self.uid]
+        model.data.update(answered=49, correct=49, elapsed=60)
+        question = model.question()
+        reply = self.host.dispatch(self.uid, {"cmd": "answer", "question": question["id"],
+            "answer": str(question["a"] * question["b"])}, now=0, day="2026-10-27")
+        self.assertTrue(reply["round_finished"])
+        self.assertEqual(reply["state"]["stage"], "division")
+        self.assertEqual(reply["state"]["remaining"], 900)
+        self.assertEqual(reply["state"]["correct"], 0)
+        self.assertTrue(reply["state"]["required"])
+        self.assertEqual(self.saved[self.user]["stage"], "division")
+        self.assertEqual(self.saved[self.user]["stage_results"]["multiplication"]["medal"], "gold")
+        replay = self.host.dispatch(self.uid, {"cmd": "answer", "question": question["id"],
+            "answer": str(question["a"] * question["b"])}, now=0, day="2026-10-27")
+        self.assertEqual(replay["error"], "stale_question")
+        self.assertEqual(replay["state"]["correct"], 0)
 
     def test_division_deadline_rejects_late_answers_and_saves_completion(self):
         for score in (19, 20):

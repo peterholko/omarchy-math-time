@@ -49,7 +49,7 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:6, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
+    property var state: ({version:7, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
       stage:"multiplication", stage_results:{}, round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
       question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
@@ -67,6 +67,7 @@ Item {
     service.busy = false
     service.state = JSON.parse(raw)
   }
+  function deliverReply(raw: string) { service.reply(JSON.parse(raw)) }
   function step(action: string): string {
     if(action === "open") math.open("{}")
     else if(action === "escape") math.handleEscape()
@@ -177,21 +178,21 @@ Item {
 
     def test_visible_question_and_timer_use_practice_state(self):
         self.assertEqual(self.view("practiceQuestion").property("text"), "7 × 8 = ?")
-        self.assertEqual(self.view("practiceCountdown").property("text"), "30:00 left in this round")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "30:00 left to answer")
 
-    def test_finished_questions_wait_for_deadline_without_asking_more(self):
+    def test_legacy_multiplication_wait_state_describes_automatic_transition(self):
         state = self.step("waiting")
         self.assertTrue(state["opened"])
         self.assertTrue(state["present"])
         self.assertEqual(self.view("practiceQuestion").property("text"), "All 50 answered")
         self.assertFalse(self.view("answerField").property("visible"))
-        self.assertIn("timer ends", self.view("roundGuidance").property("text"))
+        self.assertIn("Division starts automatically", self.view("roundGuidance").property("text"))
 
     def test_follow_up_round_resets_input_and_displays_25_question_target(self):
         state = self.step("retry")
         self.assertEqual(state["answer"], "")
         self.assertEqual(self.view("practiceQuestion").property("text"), "6 × 9 = ?")
-        self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left in this round")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left to answer")
         self.assertIn("0/25 answered", self.view("roundScore").property("text"))
         self.assertIn("Goal: 20", self.view("roundScore").property("text"))
         self.assertIn("39/50", self.view("roundGuidance").property("text"))
@@ -204,14 +205,16 @@ Item {
         self.assertFalse(self.step("close")["covering"])
 
     def complete_round(self, model, wrong):
+        original = (model.data["stage"], model.data["round"])
         for index in range(model.question_count):
             question = model.question()
             solution = str(question["a"] // question["b"] if question["operation"] == "division" else question["a"] * question["b"])
             model.answer(question["id"], "999" if index < wrong else solution)
             if index < wrong:
                 model.answer(model.question()["id"], solution)
-        model.data["elapsed"] = model.duration
-        model.finish_round()
+        if original == (model.data["stage"], model.data["round"]):
+            model.data["elapsed"] = model.duration
+            model.finish_round()
 
     def completed_model(self, wrong, follow_up=False, division_wrong=None, finish=True):
         model = Practice()
@@ -310,8 +313,8 @@ Item {
 
     def test_waiting_text_distinguishes_next_stage_from_final_completion(self):
         self.step("waiting")
-        self.assertIn("Stage 2 starts automatically", self.view("roundGuidance").property("text"))
-        self.assertEqual(self.view("practiceCountdown").property("text"), "Stage 2 · Division starts in 2:00")
+        self.assertIn("Division starts automatically", self.view("roundGuidance").property("text"))
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Starting Stage 2 · Division…")
         self.assertNotIn("desktop unlocks", self.view("roundGuidance").property("text"))
         model = self.completed_model(1, finish=False)
         for _ in range(25):
@@ -333,7 +336,7 @@ Item {
                 state = self.step("inspect")
                 self.assertFalse(state["parentOpen"], (action, key))
                 self.assertTrue(state["present"], (action, key))
-        self.assertEqual(self.view("practiceCountdown").property("text"), "Next multiplication round starts in 2:00")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Starting another multiplication round…")
         # Escape still deliberately opens the override, and returning to
         # practice restores presence without focusing Parent again.
         QTest.keyClick(window, Qt.Key_Escape)
@@ -345,7 +348,7 @@ Item {
         self.assertFalse(self.step("inspect")["parentOpen"])
         self.assertTrue(self.step("inspect")["present"])
 
-    def test_last_answer_keeps_timer_running_until_automatic_division_transition(self):
+    def test_last_answer_starts_division_immediately_without_parent_prompt_or_old_feedback(self):
         from PySide6.QtQuick import QQuickWindow
         model = Practice()
         environment = {"active": True, "locked": False, "school": True}
@@ -354,7 +357,7 @@ Item {
         for _ in range(49):
             question = model.question()
             model.answer(question["id"], str(question["a"] * question["b"]))
-        model.data["elapsed"] = 1799
+        model.data["elapsed"] = 60
         self.apply_service_state(model.snapshot(0))
         question = model.question()
         solution = str(question["a"] * question["b"])
@@ -364,18 +367,16 @@ Item {
         QTest.keyClick(window, Qt.Key_Return)
         request = self.step("inspect")["request"]
         self.assertEqual(request, {"cmd": "answer", "question": question["id"], "answer": solution})
-        self.assertTrue(model.answer(request["question"], request["answer"])["correct"])
+        reply = model.answer(request["question"], request["answer"])
+        self.assertTrue(reply["round_finished"])
         self.apply_service_state(model.snapshot(0))
-        self.step("correct")
-        for key in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
-            QTest.keyClick(window, key)
+        self.assertTrue(QMetaObject.invokeMethod(self.probe, "deliverReply", Q_ARG(str, json.dumps(reply))))
         state = self.step("inspect")
         self.assertFalse(state["parentOpen"])
         self.assertTrue(state["present"])
-        self.assertEqual(self.view("practiceCountdown").property("text"), "Stage 2 · Division starts in 0:01")
-        model.present(0, model.data["session"], "", state["present"])
-        model.advance(1, "2026-10-27", environment)
-        self.apply_service_state(model.snapshot(1))
+        self.assertEqual(state["feedback"], "")
+        self.assertEqual(state["answer"], "")
+        self.assertEqual(model.data["stage_results"]["multiplication"]["elapsed"], 60)
         self.assertEqual(model.data["stage"], "division")
         self.assertEqual(model.data["stage_results"]["multiplication"]["correct"], 50)
         self.assertFalse(self.step("inspect")["parentOpen"])
