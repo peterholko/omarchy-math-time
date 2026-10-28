@@ -1,9 +1,10 @@
 """Two-stage tables practice with server-owned timing and first-answer scoring."""
 import copy
+import math
 import secrets
 
 POLICY_VERSION = 2
-API_VERSION = 7
+API_VERSION = 8
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
@@ -48,6 +49,14 @@ class Practice:
         self.data.setdefault("migration_note", "")
         self.data.setdefault("stage", "multiplication")
         self.data.setdefault("stage_results", {})
+        self.data.setdefault("best_times", {})
+        if "stage_elapsed" not in self.data:
+            # Older follow-ups did not retain earlier rounds' time. A saved
+            # waiting screen also cannot tell us when its answers finished.
+            known = not self.data["required"] or (self.data["round"] == 1
+                and (self.data["answered"] < self.question_count or self.data.get("question")))
+            self.data["stage_elapsed"] = self.data["elapsed"] if known else None
+        self.data.setdefault("answers_completed_elapsed", None)
         if self.data.get("last_round"):
             # Version 1.1+ already saved the complete first-answer result.
             # Add its award without resetting or starting any practice.
@@ -88,6 +97,7 @@ class Practice:
             return
         self.data.update(day=day, required=True, result="", round=1, elapsed=0.0,
                          stage="multiplication", stage_results={},
+                         stage_elapsed=0.0, answers_completed_elapsed=None,
                          answered=0, correct=0, attempts=0, total_correct=0,
                          streak=0, best_streak=0, last_round=None, migration_note="",
                          session=secrets.token_hex(16), question=None, deck=[])
@@ -125,6 +135,17 @@ class Practice:
             "answered": self.data["answered"], "correct": self.data["correct"], "passed": passed,
             "wrong": self.question_count - self.data["correct"]}
         self.data["last_round"]["medal"] = round_medal(self.data["last_round"])
+        completed = self.data["answers_completed_elapsed"]
+        result = self.data["last_round"]
+        result["completion_seconds"] = math.ceil(completed) if passed and completed is not None else None
+        result["new_best"] = False
+        if result["completion_seconds"] is not None:
+            previous = self.data["best_times"].get(stage)
+            if previous is None or result["completion_seconds"] < previous["seconds"]:
+                self.data["best_times"][stage] = {"seconds": result["completion_seconds"],
+                    "correct": result["correct"], "questions": result["questions"],
+                    "rounds": result["number"], "medal": result["medal"]}
+                result["new_best"] = True
         self.data["question"] = None
         self.present_until = 0
         if passed:
@@ -133,6 +154,7 @@ class Practice:
                 # Keep the practice requirement while moving to a fresh
                 # division deck. Multiplication's result remains earned.
                 self.data.update(stage="division", round=1, elapsed=0.0,
+                                 stage_elapsed=0.0, answers_completed_elapsed=None,
                                  answered=0, correct=0, streak=0, deck=[], migration_note="")
                 self.question()
             else:
@@ -142,6 +164,7 @@ class Practice:
             # Every retry has its own 25 questions, 20-answer target and timer.
             # A previous round's points cannot pass the next one.
             self.data.update(round=self.data["round"] + 1, elapsed=0.0,
+                             answers_completed_elapsed=None,
                              answered=0, correct=0, streak=0, migration_note="")
             self.question()
         return not self.data["required"]
@@ -165,6 +188,9 @@ class Practice:
         # Never count a lock, suspend, missing view, or unknown school status.
         if (self.data["required"] and usable and previous_usable and previous_tick is not None
                 and self.present_until >= now):
+            counted = min(self.duration - self.data["elapsed"], elapsed)
+            if self.data["stage_elapsed"] is not None:
+                self.data["stage_elapsed"] += counted
             self.data["elapsed"] = min(self.duration, self.data["elapsed"] + elapsed)
             if self.data["elapsed"] >= self.duration:
                 if self.finish_round():
@@ -239,6 +265,10 @@ class Practice:
     def next_question(self):
         self.data["question"] = None
         self.present_until = 0
+        if self.data["answered"] >= self.question_count:
+            # Freeze the answer-completion time before division's waiting
+            # period. Earlier failed rounds and final review time still count.
+            self.data["answers_completed_elapsed"] = self.data["stage_elapsed"]
         # Keep the final question's guided retry/review before moving on,
         # but never wait for the remaining multiplication time afterwards.
         if self.finish_answered_multiplication():
@@ -308,6 +338,7 @@ class Practice:
                 "show": required and self.usable(), "session": self.data["session"],
                 "question": self.question(), "round": self.data["round"],
                 "stage": self.data["stage"], "stage_results": self.data["stage_results"],
+                "best_times": copy.deepcopy(self.data["best_times"]),
                 "question_count": self.question_count, "target": self.pass_score,
                 "duration": self.duration, "remaining": max(0, self.duration - self.data["elapsed"]),
                 "elapsed": self.data["elapsed"], "answered": self.data["answered"],

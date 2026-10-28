@@ -11,6 +11,8 @@ Rectangle {
   readonly property bool division: sheet.state.stage === "division"
   readonly property string stageName: division ? "Division" : "Multiplication"
   readonly property var stageResults: sheet.state.stage_results || ({})
+  readonly property var bestTimes: sheet.state.best_times || ({})
+  readonly property var currentBest: bestTimes[sheet.division ? "division" : "multiplication"] || null
   readonly property var passedStages: [stageResults.multiplication, stageResults.division].filter(function(result) { return result && result.passed })
   readonly property int roundNumber: Number(sheet.state.round || 1)
   readonly property int questionCount: Number(sheet.state.question_count || 50)
@@ -124,6 +126,7 @@ Rectangle {
       objectName: "multiplicationResult"
       visible: practising && sheet.division && result !== null
       result: sheet.stageResults.multiplication || null
+      bestTime: sheet.bestTimes.multiplication || null
       compact: true
       family: sheet.family
       width: parent.width
@@ -139,6 +142,7 @@ Rectangle {
           required property var modelData
           objectName: "stageResult-" + modelData.stage
           result: modelData
+          bestTime: sheet.bestTimes[modelData.stage] || null
           family: sheet.family
           width: (practiceColumn.width - 16 * (sheet.passedStages.length - 1)) / sheet.passedStages.length
         }
@@ -157,16 +161,74 @@ Rectangle {
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
     }
-    Text {
+    Row {
       objectName: "medalGoals"
       visible: !practising && !finished
       width: parent.width
-      text: "Round medals: Gold · 0 wrong    Silver · 1 wrong    Bronze · 2 wrong"
-      textFormat: Text.PlainText
-      color: Model.PALETTE.inkSoft
-      font { family: sheet.family; pixelSize: 17 }
-      horizontalAlignment: Text.AlignHCenter
-      wrapMode: Text.WordWrap
+      Repeater {
+        model: ["gold", "silver", "bronze"]
+        delegate: Column {
+          required property string modelData
+          required property int index
+          width: practiceColumn.width / 3
+          spacing: 4
+          MedalBadge {
+            objectName: "medalGoalBadge-" + parent.modelData
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 58; height: 62
+            medal: parent.modelData
+          }
+          Text {
+            objectName: "medalGoal-" + parent.modelData
+            width: parent.width
+            text: Model.medal(parent.modelData).name + " · " + parent.index + " wrong"
+            color: Model.medal(parent.modelData).dark
+            font { family: sheet.family; pixelSize: 17; bold: true }
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+          }
+        }
+      }
+    }
+    Row {
+      objectName: "personalBests"
+      visible: !practising && (!finished || sheet.passedStages.length === 0)
+      width: parent.width
+      spacing: 12
+      Repeater {
+        model: ["multiplication", "division"]
+        delegate: Rectangle {
+          id: personalBest
+          required property string modelData
+          readonly property var record: sheet.bestTimes[modelData] || null
+          width: (practiceColumn.width - 12) / 2
+          height: 76
+          radius: 12
+          color: "#fafbff"
+          border.color: Model.PALETTE.rule
+          Column {
+            anchors { centerIn: parent }
+            width: parent.width - 20
+            spacing: 6
+            Text {
+              width: parent.width
+              text: (personalBest.modelData === "division" ? "Division" : "Multiplication") + " · Best Time"
+              color: Model.PALETTE.inkSoft
+              font { family: sheet.family; pixelSize: 16 }
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+            }
+            Text {
+              objectName: "bestTime-" + personalBest.modelData
+              width: parent.width
+              text: personalBest.record ? Model.clock(personalBest.record.seconds) : "No time yet"
+              color: personalBest.record ? Model.PALETTE.mark : Model.PALETTE.inkSoft
+              font { family: sheet.family; pixelSize: 22; bold: true }
+              horizontalAlignment: Text.AlignHCenter
+            }
+          }
+        }
+      }
     }
     Rectangle {
       visible: practising
@@ -193,6 +255,15 @@ Rectangle {
       font { family: sheet.family; pixelSize: sheet.waiting ? 24 : 19; bold: sheet.waiting }
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
+    }
+    Text {
+      objectName: "stageBestTime"
+      visible: practising && sheet.currentBest !== null
+      width: parent.width
+      text: "Best Time · " + (sheet.currentBest ? Model.clock(sheet.currentBest.seconds) : "")
+      color: Model.PALETTE.mark
+      font { family: sheet.family; pixelSize: 16 }
+      horizontalAlignment: Text.AlignHCenter
     }
     Text {
       objectName: "practiceQuestion"

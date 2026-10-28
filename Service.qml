@@ -19,7 +19,7 @@ Item {
 
   function apply(response) {
     if (response && response.ok === true) {
-      if (response.version !== 7) {
+      if (response.version !== 8) {
         connected = false
         error = "upgrade_required"
         return

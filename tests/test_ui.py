@@ -49,7 +49,7 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:7, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
+    property var state: ({version:8, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
       stage:"multiplication", stage_results:{}, round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
       question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
@@ -206,6 +206,9 @@ Item {
 
     def complete_round(self, model, wrong):
         original = (model.data["stage"], model.data["round"])
+        model.data["elapsed"] += 120
+        if model.data["stage_elapsed"] is not None:
+            model.data["stage_elapsed"] += 120
         for index in range(model.question_count):
             question = model.question()
             solution = str(question["a"] // question["b"] if question["operation"] == "division" else question["a"] * question["b"])
@@ -213,6 +216,8 @@ Item {
             if index < wrong:
                 model.answer(model.question()["id"], solution)
         if original == (model.data["stage"], model.data["round"]):
+            if model.data["stage_elapsed"] is not None:
+                model.data["stage_elapsed"] += model.duration - model.data["elapsed"]
             model.data["elapsed"] = model.duration
             model.finish_round()
 
@@ -408,13 +413,46 @@ Item {
     def test_medal_goals_are_shown_before_starting_but_not_under_questions(self):
         self.step("idle")
         self.assertTrue(self.view("medalGoals").isVisible())
-        for label in ("Gold · 0 wrong", "Silver · 1 wrong", "Bronze · 2 wrong"):
-            self.assertIn(label, self.view("medalGoals").property("text"))
+        for medal, label in (("gold", "Gold · 0 wrong"), ("silver", "Silver · 1 wrong"), ("bronze", "Bronze · 2 wrong")):
+            self.assertEqual(label, self.view("medalGoal-" + medal).property("text"))
+            self.assertTrue(self.view("medalGoalBadge-" + medal).isVisible())
         model = Practice()
         model.advance(0, "2026-10-27", {"active": True, "locked": False, "school": False})
         model.start("2026-10-27")
         self.apply_service_state(model.snapshot(0))
         self.assertFalse(self.view("medalGoals").isVisible())
+
+    def test_best_times_appear_on_start_practice_and_results_after_reopening(self):
+        model = self.completed_model(1, division_wrong=2)
+        self.apply_service_state(model.snapshot(0))
+        for stage in ("multiplication", "division"):
+            self.assertEqual(self.view("stageResult-" + stage + "-time").property("text"), "Time · 2:00")
+            self.assertEqual(self.view("stageResult-" + stage + "-record").property("text"), "New Best Time · 2:00")
+        model = Practice(model.data)
+        model.advance(0, "2026-10-28", {"active": True, "locked": False, "school": False})
+        model.start("2026-10-28")
+        self.apply_service_state(model.snapshot(0))
+        self.assertEqual(self.view("stageBestTime").property("text"), "Best Time · 2:00")
+        self.assertTrue(self.view("stageBestTime").isVisible())
+        self.complete_round(model, 0)
+        self.apply_service_state(model.snapshot(0))
+        self.assertEqual(self.view("multiplicationResult-best").property("text"), "Best Time · 2:00")
+        self.assertEqual(self.view("stageBestTime").property("text"), "Best Time · 2:00")
+        model.end_by_parent()
+        model.start("2026-10-28")
+        model.end_by_parent()
+        self.apply_service_state(model.snapshot(0))
+        for stage in ("multiplication", "division"):
+            self.assertEqual(self.view("bestTime-" + stage).property("text"), "2:00")
+            self.assertTrue(self.view("bestTime-" + stage).isVisible())
+
+    def test_no_time_yet_is_distinct_from_a_record_and_legacy_results_have_no_invented_time(self):
+        self.step("idle")
+        for stage in ("multiplication", "division"):
+            self.assertEqual(self.view("bestTime-" + stage).property("text"), "No time yet")
+        self.step("complete")
+        self.assertFalse(self.view("stageResult-multiplication-time").isVisible())
+        self.assertFalse(self.view("stageResult-multiplication-record").isVisible())
 
     def test_answers_reach_verifier_and_cannot_dismiss_an_active_session(self):
         state = self.step("answer")

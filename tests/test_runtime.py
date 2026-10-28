@@ -178,6 +178,20 @@ class RuntimeTest(unittest.TestCase):
                 self.assertEqual(self.saved[self.user]["required"], score < 20)
                 self.assertEqual(self.saved[self.user]["stage_results"]["multiplication"]["medal"], "gold")
 
+    def test_best_time_uses_service_clock_and_is_saved_before_reply(self):
+        model = self.host.models[self.uid]
+        model.data.update(answered=49, correct=49, elapsed=60, stage_elapsed=60)
+        question = model.question()
+        model.present(0, model.data["session"], question["id"], True)
+        reply = self.host.dispatch(self.uid, {"cmd": "answer", "question": question["id"],
+            "answer": str(question["a"] * question["b"]), "elapsed": 1, "best_times": {"multiplication": {"seconds": 1}}},
+            now=1, day="2026-10-28")
+        self.assertEqual(reply["state"]["best_times"]["multiplication"]["seconds"], 61)
+        self.assertEqual(self.saved[self.user]["best_times"]["multiplication"]["seconds"], 61)
+        # The status response does not expose mutable references to records.
+        reply["state"]["best_times"]["multiplication"]["seconds"] = 1
+        self.assertEqual(model.data["best_times"]["multiplication"]["seconds"], 61)
+
     def test_clients_cannot_skip_stages_and_division_keeps_parent_authentication(self):
         model = self.host.models[self.uid]
         for message in ({"cmd": "division"}, {"cmd": "finish_round"}, {"cmd": "start", "stage": "division"}):

@@ -57,13 +57,13 @@ Item {
   function step(action: string): string {
     var watch = Quickshell.processes.find(p => p.command[3] === "watch")
     var control = Quickshell.processes.find(p => p.command[3] === "request")
-    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, version:7, required:true, show:true,
+    if (action === "status") watch.stdout.read(JSON.stringify({ok:true, version:8, required:true, show:true,
       session:"session", question:{id:"question", a:7, b:8}, remaining:1800}))
-    else if (action === "old-service") watch.stdout.read('{"ok":true,"version":6,"required":true}')
+    else if (action === "old-service") watch.stdout.read('{"ok":true,"version":7,"required":true}')
     else if (action === "present") service.setPresence(true)
-    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:7, required:true, show:true, school:true}))
-    else if (action === "locked") watch.stdout.read(JSON.stringify({ok:true, version:7, required:true, show:false, school:true, locked:true}))
-    else if (action === "idle") watch.stdout.read('{"ok":true,"version":7,"required":false,"show":false}')
+    else if (action === "school") watch.stdout.read(JSON.stringify({ok:true, version:8, required:true, show:true, school:true}))
+    else if (action === "locked") watch.stdout.read(JSON.stringify({ok:true, version:8, required:true, show:false, school:true, locked:true}))
+    else if (action === "idle") watch.stdout.read('{"ok":true,"version":8,"required":false,"show":false}')
     else if (action === "offline") watch.stdout.read('{"ok":false,"error":"service_unavailable"}')
     else if (action === "request") service.request({cmd:"parent.end", password:"example-password"})
     else if (action === "reply") { control.stdout.text = '{"ok":false,"error":"bad_password"}'; control.running = false; control.exited(0) }

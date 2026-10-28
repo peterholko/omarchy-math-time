@@ -750,6 +750,147 @@ class PracticeTest(unittest.TestCase):
                 self.assertEqual(self.practice.data["stage"], "division")
                 self.assertEqual(self.practice.data["last_round"]["correct"], 49)
 
+    def test_best_times_only_improve_and_survive_new_sessions_and_reload(self):
+        for multiplication, division, new_best in ((120, 90, True), (130, 100, False),
+                                                  (120, 90, False), (100, 70, True)):
+            self.practice.start(DAY)
+            self.work(multiplication)
+            self.answer_round(49)
+            self.assertEqual(self.practice.data["stage_results"]["multiplication"]["new_best"], new_best)
+            self.work(division)
+            self.answer_round(24)
+            self.assertNotIn("division", self.practice.data["stage_results"])
+            self.work(RETRY_DURATION - division)
+            result = self.practice.data["stage_results"]["division"]
+            self.assertEqual(result["new_best"], new_best)
+            self.assertEqual(result["completion_seconds"], division)
+        records = self.practice.snapshot(self.now)["best_times"]
+        self.assertEqual(records["multiplication"]["seconds"], 100)
+        self.assertEqual(records["division"]["seconds"], 70)
+        self.assertEqual(records["multiplication"]["medal"], "silver")
+        self.practice = Practice(self.practice.data)
+        self.practice.advance(self.now, DAY, DESKTOP)
+        self.practice.start(DAY)
+        self.assertEqual(self.practice.data["best_times"], records)
+        self.assertEqual(self.practice.data["stage_results"], {})
+        self.assertEqual(self.practice.data["stage_elapsed"], 0)
+
+    def test_best_time_includes_failed_rounds_instead_of_comparing_shorter_follow_ups(self):
+        self.work(120)
+        self.answer_round(39)
+        self.assertEqual(self.practice.data["best_times"], {})
+        self.work(30)
+        self.answer_round(19)
+        self.work(20)
+        self.answer_round(25)
+        multiplication = self.practice.data["best_times"]["multiplication"]
+        self.assertEqual(multiplication["seconds"], 170)
+        self.assertEqual(multiplication["rounds"], 3)
+        self.assertEqual(multiplication["questions"], 25)
+        self.answer_round(19)
+        self.work(RETRY_DURATION)
+        self.assertNotIn("division", self.practice.data["best_times"])
+        self.work(60)
+        self.answer_round(25)
+        self.work(RETRY_DURATION - 60)
+        self.assertEqual(self.practice.data["best_times"]["division"]["seconds"], 960)
+        self.assertEqual(self.practice.data["best_times"]["division"]["rounds"], 2)
+
+    def test_best_time_includes_final_review_but_excludes_pauses_and_division_wait(self):
+        self.work(40)
+        for _ in range(49):
+            self.answer()
+        self.answer(False)
+        self.work(5)
+        self.answer(False)
+        self.work(6)
+        self.work(12, visible=False)
+        self.assertEqual(self.practice.data["best_times"], {})
+        self.practice.acknowledge(self.practice.question()["id"])
+        self.assertEqual(self.practice.data["best_times"]["multiplication"]["seconds"], 51)
+        self.work(30)
+        for _ in range(24):
+            self.answer()
+        self.answer(False)
+        self.work(7)
+        self.answer()
+        self.assertEqual(self.practice.data["answers_completed_elapsed"], 37)
+        self.work(100)
+        self.practice = Practice(self.practice.data)
+        self.practice.advance(self.now, DAY, self.env)
+        self.work(RETRY_DURATION - 137)
+        self.assertEqual(self.practice.data["best_times"]["division"]["seconds"], 37)
+
+    def test_partial_quota_or_parent_override_never_creates_a_best_time(self):
+        for _ in range(40):
+            self.answer()
+        self.work(DURATION)
+        self.assertNotIn("multiplication", self.practice.data["best_times"])
+        for _ in range(20):
+            self.answer()
+        self.work(RETRY_DURATION)
+        self.assertTrue(self.practice.data["stage_results"]["division"]["passed"])
+        self.assertEqual(self.practice.data["best_times"], {})
+        self.practice.start(DAY)
+        self.work(50)
+        self.answer_round(50)
+        self.work(30)
+        self.answer_round(25)
+        self.practice.end_by_parent()
+        self.assertEqual(set(self.practice.data["best_times"]), {"multiplication"})
+        self.assertEqual(self.practice.data["best_times"]["multiplication"]["seconds"], 50)
+
+    def test_old_results_and_waiting_rounds_do_not_invent_best_times(self):
+        self.work(60)
+        self.answer_round(50)
+        self.work(30)
+        self.answer_round(25)
+        self.work(RETRY_DURATION - 30)
+        saved = copy.deepcopy(self.practice.data)
+        for key in ("best_times", "stage_elapsed", "answers_completed_elapsed"):
+            saved.pop(key)
+        for result in list(saved["stage_results"].values()) + [saved["last_round"]]:
+            result.pop("completion_seconds", None)
+            result.pop("new_best", None)
+        old = Practice(saved)
+        self.assertEqual(old.data["best_times"], {})
+        self.assertEqual(old.data["stage_results"]["multiplication"]["medal"], "gold")
+        saved.update(required=True, result="", stage="multiplication", round=1,
+                     answered=50, correct=50, elapsed=300, question=None, stage_results={}, last_round=None)
+        old = Practice(saved)
+        self.assertEqual(old.data["stage"], "division")
+        self.assertEqual(old.data["best_times"], {})
+
+    def test_upgraded_partial_first_round_can_set_a_time_but_old_follow_up_cannot(self):
+        for number in (1, 2):
+            with self.subTest(number=number):
+                self.setUp()
+                self.work(60)
+                self.answer()
+                saved = copy.deepcopy(self.practice.data)
+                for key in ("best_times", "stage_elapsed", "answers_completed_elapsed"):
+                    saved.pop(key)
+                saved["round"] = number
+                self.practice = Practice(saved)
+                self.practice.advance(self.now, DAY, self.env)
+                self.work(10)
+                for _ in range(self.practice.question_count - 1):
+                    self.answer()
+                if number == 1:
+                    self.assertEqual(self.practice.data["best_times"]["multiplication"]["seconds"], 70)
+                else:
+                    self.assertEqual(self.practice.data["best_times"], {})
+                self.assertEqual(self.practice.data["stage_elapsed"], 0)
+
+    def test_subsecond_records_round_up_and_displayed_ties_do_not_replace_a_best(self):
+        for elapsed, new_best in ((60.8, True), (60.1, False), (59.9, True)):
+            self.practice.start(DAY)
+            self.practice.data["stage_elapsed"] = elapsed
+            self.answer_round(50)
+            self.assertEqual(self.practice.data["stage_results"]["multiplication"]["new_best"], new_best)
+            self.practice.end_by_parent()
+        self.assertEqual(self.practice.data["best_times"]["multiplication"]["seconds"], 60)
+
 
 if __name__ == "__main__":
     unittest.main()

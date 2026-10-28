@@ -4,7 +4,7 @@ A manually started, full-screen tables app with two stages: **multiplication, th
 
 Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Practice starts manually in both **School Mode and Free Time**, with separate gold, silver and bronze medals for each stage.
 
-Version **1.7** starts Stage 2 as soon as the multiplication round is complete and passed. There is no wait for the remaining multiplication time and no parent password needed to advance.
+Version **1.8** adds a saved **Best Time** for each stage and shows all three medal badges on the start screen. Stage 2 starts as soon as the multiplication round is complete and passed, with no wait for the remaining multiplication time or parent password needed to advance.
 
 ![Math Time multiplication practice](docs/practice.png)
 
@@ -50,6 +50,10 @@ For **56 ÷ 7**, an incorrect first answer gets **“Think: 7 × what number mak
 
 Each stage awards its own medal when a passing round finishes: immediately after completing multiplication, or at its time limit; division awards its medal when its timer ends.
 
+The start screen shows all three rewards and their goals. An earned multiplication medal appears above the division questions, and both earned medals appear on the final results screen. A passing score with three or more wrong answers shows **Passed!** instead of a medal.
+
+![Gold, silver and bronze goals, with a Best Time for each stage](docs/rewards.png)
+
 | Medal | Wrong questions | First multiplication round | Division or a follow-up round |
 | --- | --- | --- | --- |
 | Gold | 0 | 50/50 correct | 25/25 correct |
@@ -61,6 +65,16 @@ Medals use the round's first-answer score. A wrong first answer still counts as 
 The multiplication score and medal stay visible during division. The final screen shows both stage results, and division mistakes cannot lower the multiplication medal. Ending early with the parent password awards nothing for the unfinished stage; any already completed stage keeps its reward. Stage results remain saved across closing the app, logout and reboot, until a new session starts. Existing saved first-answer results gain the matching medal after upgrading. Medals are visual rewards and do not change screen time or round durations.
 
 ![Separate gold medals for multiplication and division](docs/gold-medal.png)
+
+### Best Time for each stage
+
+Multiplication and division each keep their own fastest completion time for the enrolled account. The start screen, practice screen and stage results show the applicable records; a faster result is marked **New Best Time**. Records survive starting another session, closing the app, logout and reboot.
+
+- A time qualifies when every question in a passing round is answered and its final guided retry or review is finished. The passing scores remain 40/50 or 20/25. Reaching the deadline with unanswered questions or ending the stage with a parent override does not set a record.
+- Time counts from the start of that stage through the final review of its passing round, including earlier failed rounds and follow-ups. A shorter follow-up cannot discard the time spent on previous attempts.
+- Pauses, locking and time away from the practice screen do not count. Division's time is captured when its questions are finished, so waiting for the rest of its 15-minute timer does not inflate the result. Its record is awarded when the stage passes at the deadline.
+- Times are shown in minutes and seconds, rounded up. Only a faster displayed time replaces a record; ties keep the previous record. Medals still depend on accuracy, separately from speed.
+- Old completed rounds keep their medals but do not gain retrospective Best Times, because their answer-completion times were not saved. **No time yet** appears until a qualifying result is recorded. An older follow-up whose earlier timing is unavailable cannot set a record; a new session records both stages normally.
 
 The overlay covers every connected display and takes keyboard focus. This is a practice requirement within an enabled Omarchy shell plugin, not an OS security boundary: someone with administrator access or permission to disable the plugin can bypass its display. Do not remove the parent’s administrative access.
 
@@ -117,7 +131,7 @@ All new sessions start with multiplication for up to 30 minutes, followed by the
 
 ## Update
 
-Update both the shell plugin and its installed service. Version 1.7 requires the updated service; an older service produces an upgrade message until setup is rerun. Sessions still start manually in either mode. Existing version 1.1–1.6 unfinished questions, scores and remaining time are preserved. A saved multiplication round already waiting after its final question advances immediately on upgrade, keeping its score and medal; a final guided retry or review still needs to be completed. Already completed or parent-ended sessions stay finished: upgrading does not start division automatically or invent a division reward. Choose **Start another session** for the new two-stage flow. An unfinished version 1.0 session starts a fresh 50-question round because the old timer did not record first-answer scores. This also upgrades the earlier 0.2 plugin.
+Update both the shell plugin and its installed service. Version 1.8 requires the updated service; an older service produces an upgrade message until setup is rerun. Sessions still start manually in either mode. Existing version 1.1–1.7 unfinished questions, scores and remaining time are preserved. A saved multiplication round already waiting after its final question advances immediately on upgrade, keeping its score and medal; a final guided retry or review still needs to be completed. Already completed or parent-ended sessions stay finished: upgrading does not start division automatically or invent a division reward. Choose **Start another session** for the new two-stage flow. An unfinished version 1.0 session starts a fresh 50-question round because the old timer did not record first-answer scores. This also upgrades the earlier 0.2 plugin.
 
 ```bash
 omarchy plugin update io.github.peterholko.math --yes &&
@@ -173,7 +187,7 @@ python3 tests/capture_ui.py /tmp/math-time-previews
 omarchy plugin validate .
 ```
 
-Tests cover the 40/50 and 20/25 thresholds, immediate multiplication completion and follow-ups, the multiplication-to-division transition, division's full round durations, repeated follow-ups in each stage, unanswered questions, deadline boundaries, all 144 facts for each operation, guided retries, answer acknowledgement, first-answer scoring, independent stage medals and persistence, parent overrides, incorrect/replayed answers, pause/resume, reboot and upgrades from earlier releases, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
+Tests cover the 40/50 and 20/25 thresholds, immediate multiplication completion and follow-ups, the multiplication-to-division transition, division's full round durations, repeated follow-ups in each stage, unanswered questions, deadline boundaries, all 144 facts for each operation, guided retries, answer acknowledgement, first-answer scoring, independent stage medals and Best Times, follow-up timing, record persistence and ties, parent overrides, incorrect/replayed answers, pause/resume, reboot and upgrades from earlier releases, scheduling, School Mode, parent authentication decisions, the Unix-socket client, and the actual QML controller/service. The portable UI tests replace only the Quickshell process/display adapters; inspect the resulting screenshots as well. Linux PAM, systemd installation and compositor focus still need a smoke test on an Omarchy laptop. No GitHub Actions or paid CI is used.
 
 ## License
 
