@@ -30,7 +30,9 @@ Rectangle {
   function focusInput() {
     if (!visible) return
     if (controller.parentOpen) password.forceActiveFocus()
-    else if (sheet.waiting) parentButton.forceActiveFocus()
+    // Finishing the questions must not focus the early-exit action: an
+    // incidental Space would otherwise open Parent and pause the timer.
+    else if (sheet.waiting) sheet.forceActiveFocus()
     else if (sheet.reviewing || !sheet.practising) mainAction.forceActiveFocus()
     else if (practising) answerField.forceActiveFocus()
   }
@@ -183,10 +185,14 @@ Rectangle {
       objectName: "practiceCountdown"
       visible: practising
       width: parent.width
-      text: Model.clock(sheet.state.remaining) + " left in this round"
-      color: Model.PALETTE.inkSoft
-      font { family: sheet.family; pixelSize: 19 }
+      text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
+          ? (sheet.division ? "Practice finishes in " : "Stage 2 · Division starts in ")
+          : "Next " + sheet.stageName.toLowerCase() + " round starts in ") + Model.clock(sheet.state.remaining)
+        : Model.clock(sheet.state.remaining) + " left in this round"
+      color: sheet.waiting ? Model.PALETTE.ink : Model.PALETTE.inkSoft
+      font { family: sheet.family; pixelSize: sheet.waiting ? 24 : 19; bold: sheet.waiting }
       horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
     }
     Text {
       objectName: "practiceQuestion"
@@ -267,8 +273,8 @@ Rectangle {
       width: parent.width
       visible: practising && !sheet.guidedRetry && !sheet.reviewing && text.length > 0
       text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
-          ? (sheet.division ? "You reached your goal! Your desktop unlocks when this round's timer ends."
-            : "You reached your goal! Division starts when this round's timer ends.")
+          ? (sheet.division ? "You reached your goal! Practice finishes automatically when this timer ends."
+            : "You reached your goal! Stage 2 starts automatically when the timer ends. No parent password is needed.")
           : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
         : sheet.state.last_round && !sheet.state.last_round.passed
           ? "Last round: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions
@@ -309,8 +315,9 @@ Rectangle {
       horizontalAlignment: Text.AlignHCenter
     }
     Text {
+      objectName: "parentHelp"
       width: parent.width
-      text: "Enter the parent password to end this practice session early."
+      text: "Enter the parent password only to end this session early.\nThe timer is paused here. Choose Back to practice to continue."
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 19 }
       horizontalAlignment: Text.AlignHCenter

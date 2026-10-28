@@ -310,16 +310,77 @@ Item {
 
     def test_waiting_text_distinguishes_next_stage_from_final_completion(self):
         self.step("waiting")
-        self.assertIn("Division starts", self.view("roundGuidance").property("text"))
+        self.assertIn("Stage 2 starts automatically", self.view("roundGuidance").property("text"))
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Stage 2 · Division starts in 2:00")
         self.assertNotIn("desktop unlocks", self.view("roundGuidance").property("text"))
         model = self.completed_model(1, finish=False)
         for _ in range(25):
             q = model.question()
             model.answer(q["id"], str(q["a"] // q["b"]))
         self.apply_service_state(model.snapshot(0))
-        self.assertIn("desktop unlocks", self.view("roundGuidance").property("text"))
+        self.assertIn("Practice finishes automatically", self.view("roundGuidance").property("text"))
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Practice finishes in 15:00")
         self.assertEqual(self.view("practiceQuestion").property("text"), "All 25 answered")
         self.assertFalse(self.view("answerField").isVisible())
+
+    def test_waiting_keeps_typing_keys_away_from_the_parent_action(self):
+        from PySide6.QtQuick import QQuickWindow
+        window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
+        for action in ("waiting", "waiting-fail"):
+            self.step(action)
+            for key in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
+                QTest.keyClick(window, key)
+                state = self.step("inspect")
+                self.assertFalse(state["parentOpen"], (action, key))
+                self.assertTrue(state["present"], (action, key))
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Next multiplication round starts in 2:00")
+        # Escape still deliberately opens the override, and returning to
+        # practice restores presence without focusing Parent again.
+        QTest.keyClick(window, Qt.Key_Escape)
+        self.assertTrue(self.step("inspect")["parentOpen"])
+        self.assertFalse(self.step("inspect")["present"])
+        self.assertIn("timer is paused", self.view("parentHelp").property("text"))
+        QTest.keyClick(window, Qt.Key_Escape)
+        QTest.keyClick(window, Qt.Key_Space)
+        self.assertFalse(self.step("inspect")["parentOpen"])
+        self.assertTrue(self.step("inspect")["present"])
+
+    def test_last_answer_keeps_timer_running_until_automatic_division_transition(self):
+        from PySide6.QtQuick import QQuickWindow
+        model = Practice()
+        environment = {"active": True, "locked": False, "school": True}
+        model.advance(0, "2026-10-27", environment)
+        model.start("2026-10-27")
+        for _ in range(49):
+            question = model.question()
+            model.answer(question["id"], str(question["a"] * question["b"]))
+        model.data["elapsed"] = 1799
+        self.apply_service_state(model.snapshot(0))
+        question = model.question()
+        solution = str(question["a"] * question["b"])
+        window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
+        for digit in solution:
+            QTest.keyClick(window, getattr(Qt, "Key_" + digit))
+        QTest.keyClick(window, Qt.Key_Return)
+        request = self.step("inspect")["request"]
+        self.assertEqual(request, {"cmd": "answer", "question": question["id"], "answer": solution})
+        self.assertTrue(model.answer(request["question"], request["answer"])["correct"])
+        self.apply_service_state(model.snapshot(0))
+        self.step("correct")
+        for key in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
+            QTest.keyClick(window, key)
+        state = self.step("inspect")
+        self.assertFalse(state["parentOpen"])
+        self.assertTrue(state["present"])
+        self.assertEqual(self.view("practiceCountdown").property("text"), "Stage 2 · Division starts in 0:01")
+        model.present(0, model.data["session"], "", state["present"])
+        model.advance(1, "2026-10-27", environment)
+        self.apply_service_state(model.snapshot(1))
+        self.assertEqual(model.data["stage"], "division")
+        self.assertEqual(model.data["stage_results"]["multiplication"]["correct"], 50)
+        self.assertFalse(self.step("inspect")["parentOpen"])
+        self.assertTrue(self.view("answerField").property("activeFocus"))
+        self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left in this round")
 
     def test_division_follow_up_returns_keyboard_focus_from_waiting_to_the_answer(self):
         from PySide6.QtQuick import QQuickWindow

@@ -4,6 +4,8 @@ A manually started, full-screen tables app with two stages: **multiplication, th
 
 Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin ID: **`io.github.peterholko.math`**. Practice starts manually in both **School Mode and Free Time**. Version **1.6** adds the division stage and preserves separate gold, silver and bronze medals for each stage.
 
+Version **1.6.1** makes the Stage 2 countdown explicit and prevents Space after the last answer from accidentally opening the parent override.
+
 ![Math Time multiplication practice](docs/practice.png)
 
 ## How practice works
@@ -26,6 +28,14 @@ Works on regular **Omarchy Quattro with the Quickshell plugin system**. Plugin I
 - Root-owned progress preserves the current stage, round, question, retry/review step, score, earned stage rewards and remaining time across logout or reboot. Open Math Time again to resume unfinished work. Offline time does not count, and crossing midnight does not reset a round.
 - Escape and the close action open a **parent-password prompt** during required practice. The laptop’s parent/root password can end the session early, including a follow-up; checking and failure feedback are visible. There is no separate PIN or Screen Time account.
 - Practice can start and continue in **School Mode or Free Time**. Changing modes preserves the current question, score and timer. An unavailable status for a known school enrollment pauses practice until its status is available again. Installing School Mode is optional.
+
+### Moving from multiplication to division
+
+Finishing all 50 multiplication questions does not skip the remaining time. With at least 40 correct, the screen shows **“Stage 2 · Division starts in …”** and moves into division automatically when the full 30-minute round ends. No parent password or button press is needed. Multiplication follow-ups use the same transition after their 15-minute timer ends.
+
+The parent-password screen is only for ending practice early, and its timer is paused. If you opened it while waiting for division, choose **Back to practice** or press Escape to return and resume the countdown. Entering the parent password ends the session instead of advancing to division.
+
+![Waiting for the division stage without a parent-password prompt](docs/stage-countdown.png)
 
 ### Example of a guided retry
 
