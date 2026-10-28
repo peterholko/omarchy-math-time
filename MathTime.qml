@@ -64,7 +64,7 @@ Item {
     practiceService.request({cmd: "parent.end", password: password})
   }
   onStateChanged: {
-    var key = String(state.session || "") + ":" + String(state.round || 1)
+    var key = String(state.session || "") + ":" + String(state.stage || "multiplication") + ":" + String(state.round || 1)
     if (key !== roundKey) {
       roundKey = key
       answer = ""

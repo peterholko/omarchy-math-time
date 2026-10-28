@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Math Time
-Comment=50 multiplication questions with timed follow-up rounds.
+Comment=Multiplication and division tables with timed rounds and medals.
 Exec=omarchy-shell shell summon io.github.peterholko.math {}
 Icon=applications-education
 Terminal=false

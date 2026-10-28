@@ -8,6 +8,10 @@ Rectangle {
   property var controller
   readonly property var state: controller.state
   readonly property bool practising: sheet.state.required === true
+  readonly property bool division: sheet.state.stage === "division"
+  readonly property string stageName: division ? "Division" : "Multiplication"
+  readonly property var stageResults: sheet.state.stage_results || ({})
+  readonly property var passedStages: [stageResults.multiplication, stageResults.division].filter(function(result) { return result && result.passed })
   readonly property int roundNumber: Number(sheet.state.round || 1)
   readonly property int questionCount: Number(sheet.state.question_count || 50)
   readonly property int targetScore: Number(sheet.state.target || 40)
@@ -17,8 +21,6 @@ Rectangle {
   readonly property bool guidedRetry: practising && !!sheet.state.question && sheet.state.question.stage === "retry"
   readonly property bool reviewing: practising && !!sheet.state.question && sheet.state.question.stage === "reveal"
   readonly property bool finished: !practising && (sheet.state.result === "complete" || sheet.state.result === "parent")
-  readonly property var earnedMedal: finished && sheet.state.result === "complete" && sheet.state.last_round
-    && sheet.state.last_round.passed === true ? Model.medal(sheet.state.last_round.medal) : null
   readonly property bool compact: height < 850
   readonly property string family: Style.font.family
   color: Model.PALETTE.paper
@@ -34,6 +36,9 @@ Rectangle {
   }
   onReviewingChanged: Qt.callLater(focusInput)
   onGuidedRetryChanged: Qt.callLater(focusInput)
+  onWaitingChanged: Qt.callLater(focusInput)
+  onDivisionChanged: Qt.callLater(function() { practiceScroll.contentY = 0; sheet.focusInput() })
+  onPractisingChanged: Qt.callLater(function() { practiceScroll.contentY = 0; sheet.focusInput() })
   onVisibleChanged: if (visible) Qt.callLater(focusInput)
   Component.onCompleted: Qt.callLater(focusInput)
   Connections {
@@ -87,6 +92,7 @@ Rectangle {
   }
 
   Flickable {
+    id: practiceScroll
     anchors { top: parent.top; topMargin: 100; bottom: parent.bottom; bottomMargin: 24; left: parent.left; right: parent.right }
     contentHeight: Math.max(height, practiceColumn.height, parentColumn.height)
     clip: true
@@ -101,46 +107,39 @@ Rectangle {
     spacing: sheet.compact ? 12 : 22
     visible: !controller.parentOpen
     Text {
+      objectName: "practiceHeading"
       width: parent.width
-      text: practising ? (sheet.roundNumber === 1 ? "Multiplication tables" : "Extra practice · Round " + sheet.roundNumber)
-        : finished ? (sheet.state.result === "parent" ? "Session ended" : "Practice finished!") : "Your multiplication round"
+      text: practising ? "Stage " + (sheet.division ? "2" : "1") + " of 2 · " + sheet.stageName
+        + (sheet.roundNumber > 1 ? " · Round " + sheet.roundNumber : " tables")
+        : finished ? (sheet.state.result === "parent" ? "Session ended" : "Practice finished!") : "Multiplication, then division"
       textFormat: Text.PlainText
       color: Model.PALETTE.ink
       font { family: sheet.family; pixelSize: sheet.compact ? 30 : 40; bold: true }
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
     }
-    Column {
-      objectName: "roundMedal"
-      visible: sheet.earnedMedal !== null
+    StageResult {
+      objectName: "multiplicationResult"
+      visible: practising && sheet.division && result !== null
+      result: sheet.stageResults.multiplication || null
+      compact: true
+      family: sheet.family
       width: parent.width
-      spacing: 8
-      MedalBadge {
-        objectName: "medalBadge"
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: sheet.compact ? 144 : 160
-        height: sheet.compact ? 153 : 170
-        medal: sheet.earnedMedal ? sheet.state.last_round.medal : "gold"
-      }
-      Text {
-        objectName: "medalTitle"
-        width: parent.width
-        text: sheet.earnedMedal ? sheet.earnedMedal.name + " medal!" : ""
-        textFormat: Text.PlainText
-        color: sheet.earnedMedal ? sheet.earnedMedal.dark : Model.PALETTE.ink
-        font { family: sheet.family; pixelSize: 28; bold: true }
-        horizontalAlignment: Text.AlignHCenter
-        wrapMode: Text.WordWrap
-      }
-      Text {
-        objectName: "medalMessage"
-        width: parent.width
-        text: sheet.earnedMedal ? sheet.state.last_round.wrong + " wrong · " + sheet.earnedMedal.message : ""
-        textFormat: Text.PlainText
-        color: Model.PALETTE.inkSoft
-        font { family: sheet.family; pixelSize: 18 }
-        horizontalAlignment: Text.AlignHCenter
-        wrapMode: Text.WordWrap
+    }
+    Row {
+      objectName: "stageResults"
+      visible: finished && sheet.passedStages.length > 0
+      width: parent.width
+      spacing: 16
+      Repeater {
+        model: sheet.passedStages
+        delegate: StageResult {
+          required property var modelData
+          objectName: "stageResult-" + modelData.stage
+          result: modelData
+          family: sheet.family
+          width: (practiceColumn.width - 16 * (sheet.passedStages.length - 1)) / sheet.passedStages.length
+        }
       }
     }
     Text {
@@ -148,10 +147,9 @@ Rectangle {
       objectName: "roundScore"
       text: practising ? sheet.answeredCount + "/" + sheet.questionCount + " answered  ·  "
           + sheet.correctCount + " correct  ·  Goal: " + sheet.targetScore
-        : finished ? (sheet.state.result === "parent" ? "The previous session was ended by a parent."
-          : sheet.state.last_round ? "Round " + (sheet.state.last_round.number || sheet.roundNumber) + " passed: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions + " correct. Well done!"
-          : "The session is finished. Well done!")
-        : "Tables 1–12 · 50 questions · 30 minutes · 40 correct to pass"
+        : finished ? (sheet.state.result === "parent" ? "The session was ended by a parent. Completed stage rewards are saved."
+          : sheet.stageResults.division ? "Both stages passed. Well done!" : "Multiplication passed. Well done!")
+        : "Tables 1–12 · Stage 1: 50 questions in 30 minutes, 40 correct\nStage 2: 25 questions in 15 minutes, 20 correct"
       color: Model.PALETTE.inkSoft
       font { family: sheet.family; pixelSize: 18 }
       horizontalAlignment: Text.AlignHCenter
@@ -191,11 +189,11 @@ Rectangle {
       horizontalAlignment: Text.AlignHCenter
     }
     Text {
-      objectName: "multiplicationQuestion"
+      objectName: "practiceQuestion"
       visible: practising
       width: parent.width
       text: sheet.waiting ? "All " + sheet.questionCount + " answered"
-        : sheet.state.question ? sheet.state.question.a + " × " + sheet.state.question.b + " = "
+        : sheet.state.question ? sheet.state.question.a + (sheet.division ? " ÷ " : " × ") + sheet.state.question.b + " = "
             + (sheet.reviewing ? sheet.state.question.solution : "?") : "Getting your question…"
       color: Model.PALETTE.ink
       font { family: sheet.family; pixelSize: sheet.waiting ? 34 : sheet.compact ? 55 : 78; bold: true }
@@ -269,11 +267,12 @@ Rectangle {
       width: parent.width
       visible: practising && !sheet.guidedRetry && !sheet.reviewing && text.length > 0
       text: sheet.waiting ? (sheet.correctCount >= sheet.targetScore
-          ? "You reached your goal! Your desktop unlocks when this round's timer ends."
+          ? (sheet.division ? "You reached your goal! Your desktop unlocks when this round's timer ends."
+            : "You reached your goal! Division starts when this round's timer ends.")
           : "When this timer ends, try 25 more questions in 15 minutes. Aim for 20 correct.")
         : sheet.state.last_round && !sheet.state.last_round.passed
           ? "Last round: " + sheet.state.last_round.correct + "/" + sheet.state.last_round.questions
-            + ". Aim for 20/25 this round to finish."
+            + ". Aim for 20/25 this round to " + (sheet.division ? "finish." : "reach division.")
         : sheet.state.migration_note || ""
       textFormat: Text.PlainText
       color: Model.PALETTE.inkSoft

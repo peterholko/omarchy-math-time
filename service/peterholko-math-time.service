@@ -1,5 +1,5 @@
 [Unit]
-Description=Math Time multiplication practice
+Description=Math Time multiplication and division practice
 After=systemd-logind.service
 
 [Service]

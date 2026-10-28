@@ -28,7 +28,14 @@ class PracticeTest(unittest.TestCase):
     def answer(self, correct=True):
         q = self.practice.question()
         self.assertIsNotNone(q)
-        return self.practice.answer(q["id"], str(q["a"] * q["b"]) if correct else "999")
+        solution = q["a"] // q["b"] if q["operation"] == "division" else q["a"] * q["b"]
+        return self.practice.answer(q["id"], str(solution) if correct else "999")
+
+    def enter_division(self, correct=50):
+        self.answer_round(correct)
+        self.work(DURATION)
+        self.assertEqual(self.practice.data["stage"], "division")
+        self.assertTrue(self.practice.data["required"])
 
     def answer_round(self, correct):
         count = self.practice.question_count
@@ -61,12 +68,14 @@ class PracticeTest(unittest.TestCase):
                 self.assertTrue(self.practice.data["required"])
                 self.work(1)
                 self.assertEqual(self.practice.data["last_round"]["correct"], score)
-                self.assertEqual(self.practice.data["required"], score < 40)
+                self.assertTrue(self.practice.data["required"])
                 if score < 40:
                     self.assertEqual(self.practice.snapshot(self.now)["question_count"], 25)
                     self.assertEqual(self.practice.snapshot(self.now)["remaining"], RETRY_DURATION)
                 else:
-                    self.assertEqual(self.practice.data["result"], "complete")
+                    self.assertEqual(self.practice.data["stage"], "division")
+                    self.assertEqual(self.practice.data["result"], "")
+                    self.assertEqual(self.practice.data["stage_results"]["multiplication"]["correct"], score)
 
     def test_medals_for_zero_one_or_two_wrong_in_initial_and_follow_up_rounds(self):
         for follow_up in (False, True):
@@ -87,7 +96,8 @@ class PracticeTest(unittest.TestCase):
                     self.assertEqual(result["medal"], medal)
                     self.assertEqual(result["wrong"], wrong)
                     self.assertTrue(result["passed"])
-                    self.assertFalse(self.practice.data["required"])
+                    self.assertTrue(self.practice.data["required"])
+                    self.assertEqual(self.practice.data["stage_results"]["multiplication"], result)
 
     def test_wrong_retry_is_still_one_wrong_question_for_medals(self):
         self.answer(False)
@@ -114,17 +124,27 @@ class PracticeTest(unittest.TestCase):
     def test_medal_survives_reload_and_starting_again_clears_the_previous_result(self):
         self.answer_round(50)
         self.work(DURATION)
+        self.answer_round(24)
+        self.work(RETRY_DURATION)
         restored = Practice(self.practice.data)
-        self.assertEqual(restored.snapshot(0)["last_round"]["medal"], "gold")
+        self.assertEqual(restored.snapshot(0)["last_round"]["medal"], "silver")
+        self.assertEqual(restored.data["stage_results"]["multiplication"]["medal"], "gold")
         self.assertFalse(restored.data["required"])
         restored.advance(0, DAY, self.env)
         self.assertTrue(restored.start(DAY)["ok"])
         self.assertIsNone(restored.snapshot(0)["last_round"])
+        self.assertEqual(restored.data["stage_results"], {})
+        self.assertEqual(restored.data["stage"], "multiplication")
 
     def test_existing_scored_results_gain_medals_without_resetting_saved_work(self):
         self.answer_round(48)
         self.work(DURATION)
         saved = copy.deepcopy(self.practice.data)
+        # Reconstruct a version 1.5 result: multiplication ended the session.
+        saved.pop("stage")
+        saved.pop("stage_results")
+        saved.update(required=False, result="complete", elapsed=DURATION)
+        saved["last_round"].pop("stage")
         saved["last_round"].pop("medal")
         saved["last_round"].pop("wrong")
         restored = Practice(saved)
@@ -133,6 +153,10 @@ class PracticeTest(unittest.TestCase):
         self.assertFalse(restored.data["required"])
         self.assertEqual(restored.data["session"], saved["session"])
         self.assertEqual(restored.data["elapsed"], DURATION)
+        self.assertEqual(restored.data["stage_results"]["multiplication"]["medal"], "bronze")
+        restored.advance(10, DAY, DESKTOP)
+        self.assertFalse(restored.data["required"])
+        self.assertNotIn("division", restored.data["stage_results"])
 
     def test_parent_ending_a_perfect_unfinished_round_does_not_award_a_medal(self):
         self.answer_round(50)
@@ -157,7 +181,9 @@ class PracticeTest(unittest.TestCase):
         self.work(RETRY_DURATION - 1)
         self.assertTrue(self.practice.data["required"])
         self.work(1)
-        self.assertFalse(self.practice.data["required"])
+        self.assertTrue(self.practice.data["required"])
+        self.assertEqual(self.practice.data["stage"], "division")
+        self.assertEqual(self.practice.data["round"], 1)
         self.assertEqual(self.practice.data["last_round"]["correct"], 20)
         self.assertEqual(self.practice.data["last_round"]["questions"], 25)
 
@@ -398,6 +424,9 @@ class PracticeTest(unittest.TestCase):
         self.answer_round(40)
         self.work(1799)
         self.work(1, day="2026-09-13")
+        self.assertTrue(self.practice.data["required"])
+        self.answer_round(20)
+        self.work(RETRY_DURATION, day="2026-09-13")
         self.assertFalse(self.practice.data["required"])
         self.assertEqual(self.practice.data["day"], "2026-09-13")
         self.setUp()
@@ -468,9 +497,13 @@ class PracticeTest(unittest.TestCase):
         self.work(DURATION - 1)
         self.assertTrue(self.practice.data["required"])
         self.work(1)
+        self.assertTrue(self.practice.data["required"])
+        self.assertEqual(self.practice.data["stage"], "division")
+        self.assertEqual(self.practice.data["last_round"]["correct"], 40)
+        self.answer_round(20)
+        self.work(RETRY_DURATION)
         self.assertFalse(self.practice.data["required"])
         self.assertEqual(self.practice.data["result"], "complete")
-        self.assertEqual(self.practice.data["last_round"]["correct"], 40)
 
     def test_legacy_queued_automatic_start_is_discarded_without_resetting_progress(self):
         saved = copy.deepcopy(self.practice.data)
@@ -489,6 +522,159 @@ class PracticeTest(unittest.TestCase):
             restored = Practice({**saved, "required": False, "result": result})
             restored.advance(1, "2026-09-13", {**DESKTOP, "session": "new-boot:login-one"})
             self.assertFalse(restored.data["required"])
+
+    def test_division_requires_20_of_25_at_its_full_deadline(self):
+        for score in (19, 20, 21, 25):
+            with self.subTest(score=score):
+                self.setUp()
+                self.enter_division()
+                multiplication = copy.deepcopy(self.practice.data["stage_results"]["multiplication"])
+                self.assertEqual(self.practice.question_count, 25)
+                self.assertEqual(self.practice.pass_score, 20)
+                self.assertEqual(self.practice.duration, 900)
+                self.answer_round(score)
+                self.work(899)
+                self.assertTrue(self.practice.data["required"])
+                self.work(1)
+                self.assertEqual(self.practice.data["required"], score < 20)
+                self.assertEqual(self.practice.data["last_round"]["correct"], score)
+                self.assertEqual(self.practice.data["stage_results"]["multiplication"], multiplication)
+                if score < 20:
+                    self.assertEqual(self.practice.data["round"], 2)
+                    self.assertEqual(self.practice.data["correct"], 0)
+                    self.assertEqual(self.practice.data["elapsed"], 0)
+                    self.assertNotIn("division", self.practice.data["stage_results"])
+                else:
+                    self.assertEqual(self.practice.data["result"], "complete")
+                    self.assertEqual(self.practice.data["stage_results"]["division"]["correct"], score)
+
+    def test_division_retries_repeat_without_restarting_multiplication(self):
+        self.enter_division()
+        for number in (1, 2):
+            self.answer_round(19)
+            self.work(900)
+            self.assertEqual(self.practice.data["stage"], "division")
+            self.assertEqual(self.practice.data["round"], number + 1)
+            self.assertEqual(self.practice.data["answered"], 0)
+            self.assertEqual(self.practice.data["correct"], 0)
+            self.assertEqual(self.practice.data["stage_results"]["multiplication"]["medal"], "gold")
+        self.answer_round(20)
+        self.work(900)
+        self.assertFalse(self.practice.data["required"])
+        self.assertEqual(self.practice.data["last_round"]["number"], 3)
+
+    def test_division_medals_and_unanswered_questions_are_independent_of_multiplication(self):
+        for follow_up in (False, True):
+            for unanswered in (False, True):
+                for wrong, medal in ((0, "gold"), (1, "silver"), (2, "bronze"), (3, "")):
+                    with self.subTest(follow_up=follow_up, unanswered=unanswered, wrong=wrong):
+                        self.setUp()
+                        self.enter_division(48)
+                        if follow_up:
+                            self.work(900)
+                        if unanswered:
+                            for _ in range(25 - wrong):
+                                self.answer()
+                        else:
+                            self.answer_round(25 - wrong)
+                        self.work(899)
+                        self.assertNotIn("division", self.practice.data["stage_results"])
+                        self.work(1)
+                        self.assertEqual(self.practice.data["stage_results"]["division"]["medal"], medal)
+                        self.assertEqual(self.practice.data["stage_results"]["division"]["wrong"], wrong)
+                        self.assertEqual(self.practice.data["stage_results"]["multiplication"]["medal"], "bronze")
+
+    def test_all_division_facts_are_exact_and_covered_before_repeating(self):
+        self.enter_division()
+        seen = set()
+        for _ in range(144):
+            if self.practice.question() is None:
+                self.work(900)
+            q = self.practice.question()
+            self.assertEqual(q["operation"], "division")
+            self.assertEqual(q["a"] % q["b"], 0)
+            self.assertTrue(1 <= q["a"] // q["b"] <= 12)
+            self.assertNotIn((q["a"], q["b"]), seen)
+            seen.add((q["a"], q["b"]))
+            self.complete_question(False)
+        self.assertEqual(seen, {(a * b, b) for a in range(1, 13) for b in range(1, 13)})
+
+    def test_division_hint_retry_reveal_and_final_question_keep_first_answer_score(self):
+        self.enter_division()
+        for _ in range(24):
+            self.answer()
+        self.practice.data["question"] = {"id": "division-fact", "a": 56, "b": 7,
+                                          "operation": "division", "stage": "first"}
+        reply = self.answer(False)
+        self.assertIn("7 × what number makes 56?", reply["hint"])
+        self.assertNotIn("8", reply["hint"])
+        self.assertNotIn("solution", self.practice.question())
+        self.assertEqual(self.practice.answer("division-fact", "8")["error"], "stale_question")
+        reply = self.answer(False)
+        self.assertIn("56 ÷ 7 = 8", reply["hint"])
+        self.assertEqual(self.practice.question()["solution"], 8)
+        self.assertEqual(self.practice.data["correct"], 24)
+        self.practice.acknowledge(self.practice.question()["id"])
+        self.assertIsNone(self.practice.question())
+        self.work(900)
+        self.assertEqual(self.practice.data["stage_results"]["division"]["medal"], "silver")
+
+    def test_division_reload_pause_resume_and_mode_changes_preserve_progress_and_rewards(self):
+        for question_stage in ("first", "retry", "reveal"):
+            with self.subTest(stage=question_stage):
+                self.setUp()
+                self.enter_division()
+                for _ in range(5):
+                    self.answer()
+                if question_stage != "first":
+                    self.answer(False)
+                if question_stage == "reveal":
+                    self.answer(False)
+                self.work(37)
+                saved = copy.deepcopy(self.practice.data)
+                self.practice = Practice(saved)
+                self.now += 10000
+                self.practice.advance(self.now, DAY, self.env)
+                self.assertEqual(self.practice.data, saved)
+                self.assertTrue(self.practice.start(DAY)["ok"])
+                self.assertEqual(self.practice.data, saved)
+                self.env = {**DESKTOP, "locked": True}
+                self.work(10)
+                self.env = {**DESKTOP, "school": True}
+                self.work(2)
+                self.assertEqual(self.practice.data["elapsed"], 38)
+                self.assertEqual(self.practice.question(), saved["question"])
+                self.assertEqual(self.practice.data["stage_results"], saved["stage_results"])
+
+    def test_parent_ending_division_preserves_multiplication_but_cannot_award_division(self):
+        self.enter_division()
+        self.answer_round(25)
+        self.work(899)
+        self.practice.end_by_parent(DAY)
+        self.work(2)
+        self.assertEqual(self.practice.data["result"], "parent")
+        self.assertNotIn("division", self.practice.data["stage_results"])
+        self.assertEqual(self.practice.data["stage_results"]["multiplication"]["medal"], "gold")
+
+    def test_upgrade_resumes_old_multiplication_and_only_enters_division_after_passing(self):
+        for _ in range(7):
+            self.answer()
+        self.work(123)
+        saved = copy.deepcopy(self.practice.data)
+        saved.pop("stage")
+        saved.pop("stage_results")
+        saved["question"].pop("operation")
+        self.practice = Practice(saved)
+        self.practice.advance(self.now, DAY, self.env)
+        self.assertEqual(self.practice.data["stage"], "multiplication")
+        self.assertEqual(self.practice.data["elapsed"], 123)
+        self.assertEqual(self.practice.data["correct"], 7)
+        self.assertEqual(self.practice.question()["id"], saved["question"]["id"])
+        for _ in range(43):
+            self.answer()
+        self.work(DURATION - 123)
+        self.assertEqual(self.practice.data["stage"], "division")
+        self.assertEqual(self.practice.data["stage_results"]["multiplication"]["medal"], "gold")
 
     def test_upgrade_keeps_finished_days_but_starts_unscored_old_session_fresh(self):
         old = {"day": DAY, "required": True, "session": "old-session", "credited": 1234,

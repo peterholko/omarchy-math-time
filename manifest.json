@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.peterholko.math",
   "name": "Math Time",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "Peter Holko",
   "kinds": [
     "overlay",
@@ -13,6 +13,6 @@
     "overlay": "MathTime.qml",
     "service": "Service.qml"
   },
-  "description": "Manually started multiplication rounds with gold, silver and bronze medals, guided retries, and parent-password override.",
+  "description": "Multiplication followed by division, with separate stage medals, guided retries, and parent-password override.",
   "license": "MIT"
 }

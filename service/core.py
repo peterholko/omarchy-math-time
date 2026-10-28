@@ -1,9 +1,9 @@
-"""Multiplication rounds with server-owned timing and first-answer scoring."""
+"""Two-stage tables practice with server-owned timing and first-answer scoring."""
 import copy
 import secrets
 
 POLICY_VERSION = 2
-API_VERSION = 5
+API_VERSION = 6
 DURATION = 30 * 60
 RETRY_DURATION = 15 * 60
 QUESTION_COUNT = 50
@@ -46,24 +46,33 @@ class Practice:
             if saved and self.data["required"]:
                 self.data["migration_note"] = "Updated practice: a fresh 50-question round starts now."
         self.data.setdefault("migration_note", "")
+        self.data.setdefault("stage", "multiplication")
+        self.data.setdefault("stage_results", {})
         if self.data.get("last_round"):
             # Version 1.1+ already saved the complete first-answer result.
             # Add its award without resetting or starting any practice.
             result = self.data["last_round"]
+            result.setdefault("stage", "multiplication")
             result["wrong"] = result["questions"] - result["correct"]
             result["medal"] = round_medal(result)
+            if result["passed"]:
+                self.data["stage_results"].setdefault(result["stage"], copy.deepcopy(result))
+
+    @property
+    def first_multiplication_round(self):
+        return self.data["stage"] == "multiplication" and self.data["round"] == 1
 
     @property
     def duration(self):
-        return DURATION if self.data["round"] == 1 else RETRY_DURATION
+        return DURATION if self.first_multiplication_round else RETRY_DURATION
 
     @property
     def question_count(self):
-        return QUESTION_COUNT if self.data["round"] == 1 else RETRY_QUESTION_COUNT
+        return QUESTION_COUNT if self.first_multiplication_round else RETRY_QUESTION_COUNT
 
     @property
     def pass_score(self):
-        return PASS_SCORE if self.data["round"] == 1 else RETRY_PASS_SCORE
+        return PASS_SCORE if self.first_multiplication_round else RETRY_PASS_SCORE
 
     def usable(self):
         env = self.environment
@@ -75,6 +84,7 @@ class Practice:
         if self.data["required"]:
             return
         self.data.update(day=day, required=True, result="", round=1, elapsed=0.0,
+                         stage="multiplication", stage_results={},
                          answered=0, correct=0, attempts=0, total_correct=0,
                          streak=0, best_streak=0, last_round=None, migration_note="",
                          session=secrets.token_hex(16), question=None, deck=[])
@@ -87,6 +97,7 @@ class Practice:
         # A scored final question may still need its guided retry or review.
         if self.data.get("question"):
             self.data["question"].setdefault("stage", "first")
+            self.data["question"].setdefault("operation", "multiplication")
             return self.data["question"]
         if self.data["answered"] >= self.question_count:
             return None
@@ -96,12 +107,16 @@ class Practice:
                 secrets.SystemRandom().shuffle(deck)
                 self.data["deck"] = deck
             a, b = self.data["deck"].pop()
-            self.data["question"] = {"id": secrets.token_hex(16), "a": a, "b": b, "stage": "first"}
+            if self.data["stage"] == "division":
+                a *= b
+            self.data["question"] = {"id": secrets.token_hex(16), "a": a, "b": b,
+                                     "operation": self.data["stage"], "stage": "first"}
         return self.data["question"]
 
     def finish_round(self):
         passed = self.data["correct"] >= self.pass_score
-        self.data["last_round"] = {"number": self.data["round"], "duration": self.duration,
+        stage = self.data["stage"]
+        self.data["last_round"] = {"stage": stage, "number": self.data["round"], "duration": self.duration,
             "questions": self.question_count, "target": self.pass_score,
             "answered": self.data["answered"], "correct": self.data["correct"], "passed": passed,
             "wrong": self.question_count - self.data["correct"]}
@@ -109,15 +124,23 @@ class Practice:
         self.data["question"] = None
         self.present_until = 0
         if passed:
-            self.data["required"] = False
-            self.data["result"] = "complete"
+            self.data["stage_results"][stage] = copy.deepcopy(self.data["last_round"])
+            if stage == "multiplication":
+                # Keep the practice requirement while moving to a fresh
+                # division deck. Multiplication's result remains earned.
+                self.data.update(stage="division", round=1, elapsed=0.0,
+                                 answered=0, correct=0, streak=0, deck=[], migration_note="")
+                self.question()
+            else:
+                self.data["required"] = False
+                self.data["result"] = "complete"
         else:
             # Every retry has its own 25 questions, 20-answer target and timer.
             # A previous round's points cannot pass the next one.
             self.data.update(round=self.data["round"] + 1, elapsed=0.0,
                              answered=0, correct=0, streak=0, migration_note="")
             self.question()
-        return passed
+        return not self.data["required"]
 
     def advance(self, now, day, environment):
         now = max(now, self.last_tick) if self.last_tick is not None else now
@@ -164,8 +187,11 @@ class Practice:
         value = str(answer).strip()
         if not value.isascii() or not value.isdecimal() or len(value) > 3:
             return {"ok": False, "error": "use_digits"}
-        correct = int(value) == question["a"] * question["b"]
-        fact = f"{question['a']} × {question['b']} = {question['a'] * question['b']}"
+        division = question["operation"] == "division"
+        solution = question["a"] // question["b"] if division else question["a"] * question["b"]
+        operator = "÷" if division else "×"
+        correct = int(value) == solution
+        fact = f"{question['a']} {operator} {question['b']} = {solution}"
         if question["stage"] == "retry":
             # The original answer already fixed the score. The retry is only
             # for learning, regardless of whether it succeeds.
@@ -174,7 +200,7 @@ class Practice:
                 return {"ok": True, "correct": True, "scored": False,
                         "hint": "That's it! " + fact + ". Your score stays the same."}
             self.data["question"] = {**question, "id": secrets.token_hex(16),
-                "stage": "reveal", "solution": question["a"] * question["b"]}
+                "stage": "reveal", "solution": solution}
             self.present_until = 0
             return {"ok": True, "correct": False, "scored": False,
                     "hint": "Let's remember: " + fact + ". Choose Continue when you're ready."}
@@ -188,9 +214,10 @@ class Practice:
             self.data["best_streak"] = max(self.data["best_streak"], self.data["streak"])
         else:
             self.data["streak"] = 0
-            hint = "Not quite. " + self.guided_hint(question["a"], question["b"])
+            hint = "Not quite. " + (f"Think: {question['b']} × what number makes {question['a']}?"
+                                   if division else self.guided_hint(question["a"], question["b"]))
             # Rotate the token so a repeated first request cannot accidentally
-            # consume the one retry. The multiplication fact stays the same.
+            # consume the one retry. The fact stays the same.
             self.data["question"] = {**question, "id": secrets.token_hex(16),
                                      "stage": "retry", "hint": hint}
             self.present_until = 0
@@ -264,6 +291,7 @@ class Practice:
         return {"ok": True, "version": API_VERSION, "required": required,
                 "show": required and self.usable(), "session": self.data["session"],
                 "question": self.question(), "round": self.data["round"],
+                "stage": self.data["stage"], "stage_results": self.data["stage_results"],
                 "question_count": self.question_count, "target": self.pass_score,
                 "duration": self.duration, "remaining": max(0, self.duration - self.data["elapsed"]),
                 "elapsed": self.data["elapsed"], "answered": self.data["answered"],

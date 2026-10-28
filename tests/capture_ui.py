@@ -66,6 +66,24 @@ def main():
                     QTest.qWait(100)
                     suffix = "follow-up" if follow_up else "first"
                     assert window.grabWindow().save(str(args.directory / f"{medal}-{suffix}-{width}x{height}.png"))
+        model = test.completed_model(0, finish=False)
+        model.data["question"] = {"id": "division-example", "a": 56, "b": 7, "operation": "division", "stage": "first"}
+        for action in ("division", "division-hint", "division-reveal", "division-retry", "division-parent"):
+            if action in ("division-hint", "division-reveal"):
+                model.answer(model.question()["id"], "9")
+            elif action == "division-retry":
+                model.data["elapsed"] = model.duration
+                model.finish_round()
+            elif action == "division-parent":
+                model.end_by_parent()
+            test.apply_service_state(model.snapshot(0))
+            test.step("open")
+            for width, height in ((1280, 720), (800, 600)):
+                window.resize(width, height)
+                window.contentItem().setWidth(width)
+                window.contentItem().setHeight(height)
+                QTest.qWait(100)
+                assert window.grabWindow().save(str(args.directory / f"{action}-{width}x{height}.png"))
     finally:
         test.doCleanups()
 

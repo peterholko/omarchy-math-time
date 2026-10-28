@@ -133,8 +133,43 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(result["state"]["correct"], 40)
         model.present(0.5, model.data["session"], "", True)
         result = self.host.dispatch(self.uid, {"cmd": "status"}, now=1, day="2026-09-12")
-        self.assertFalse(result["required"])
-        self.assertEqual(result["result"], "complete")
+        self.assertTrue(result["required"])
+        self.assertEqual(result["stage"], "division")
+        self.assertEqual(result["stage_results"]["multiplication"]["correct"], 40)
+        self.assertEqual(self.saved[self.user]["stage"], "division")
+        self.assertEqual(self.saved[self.user]["elapsed"], 0)
+
+    def test_division_deadline_rejects_late_answers_and_saves_completion(self):
+        for score in (19, 20):
+            with self.subTest(score=score):
+                self.setUp()
+                model = self.host.models[self.uid]
+                model.data.update(answered=50, correct=50, elapsed=1800)
+                model.finish_round()
+                model.data.update(elapsed=899, answered=24, correct=score)
+                q = model.question()
+                model.present(0, model.data["session"], q["id"], True)
+                result = self.host.dispatch(self.uid, {"cmd": "answer", "question": q["id"],
+                    "answer": str(q["a"] // q["b"])}, now=1, day="2026-09-12")
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["state"]["last_round"]["correct"], score)
+                self.assertEqual(result["state"]["required"], score < 20)
+                self.assertEqual(self.saved[self.user]["stage"], "division")
+                self.assertEqual(self.saved[self.user]["required"], score < 20)
+                self.assertEqual(self.saved[self.user]["stage_results"]["multiplication"]["medal"], "gold")
+
+    def test_clients_cannot_skip_stages_and_division_keeps_parent_authentication(self):
+        model = self.host.models[self.uid]
+        for message in ({"cmd": "division"}, {"cmd": "finish_round"}, {"cmd": "start", "stage": "division"}):
+            self.host.dispatch(self.uid, message, now=0, day="2026-09-12")
+            self.assertEqual(model.data["stage"], "multiplication")
+        model.data.update(answered=50, correct=50, elapsed=1800)
+        model.finish_round()
+        reply = self.host.dispatch(self.uid, {"cmd": "parent.end", "password": "test-parent-password"}, now=1)
+        self.assertTrue(reply["ok"])
+        self.assertEqual(self.saved[self.user]["result"], "parent")
+        self.assertNotIn("division", self.saved[self.user]["stage_results"])
+        self.assertEqual(self.saved[self.user]["stage_results"]["multiplication"]["medal"], "gold")
 
 
 if __name__ == "__main__":

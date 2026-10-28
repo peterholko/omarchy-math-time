@@ -30,7 +30,7 @@ class UiTest(unittest.TestCase):
             path = self.base / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
-        for name in ("PracticeSheet.qml", "MedalBadge.qml", "MathModel.js"):
+        for name in ("PracticeSheet.qml", "MedalBadge.qml", "StageResult.qml", "MathModel.js"):
             shutil.copyfile(ROOT / name, self.base / name)
         qml = (ROOT / "MathTime.qml").read_text()
         qml = "\n".join(line for line in qml.splitlines() if "WlrLayershell." not in line and "exclusionMode:" not in line)
@@ -49,8 +49,8 @@ import QtQuick
 Item {
   id: probe
   property QtObject service: QtObject {
-    property var state: ({version:5, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
-      round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
+    property var state: ({version:6, trigger:"manual", required:true, show:true, active:true, locked:false, school:false,
+      stage:"multiplication", stage_results:{}, round:1, question_count:50, target:40, answered:0, duration:1800, elapsed:0, last_round:null,
       question:{id:"one", a:7, b:8, stage:"first"}, session:"session", remaining:1800, correct:0})
     property bool connected: true
     property bool busy: false
@@ -91,7 +91,7 @@ Item {
     } else if(action === "idle") {
       service.busy = false; service.connected = true
       service.state = Object.assign({}, service.state, {required:false, show:false, result:"", question:null,
-        school:false, locked:false, active:true})
+        school:false, locked:false, active:true, stage:"multiplication", stage_results:{}})
       service.requestValue = ({})
     } else if(action === "locked") {
       service.state = Object.assign({}, service.state, {show:false, locked:true})
@@ -99,7 +99,7 @@ Item {
       service.state = Object.assign({}, service.state, {show:service.state.required, locked:false})
     } else if(action === "offline") service.connected = false
     else if(action === "complete") {
-      service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, answered:50, correct:40, last_round:{questions:50, correct:40, passed:true}})
+      service.state = Object.assign({}, service.state, {required:false, show:false, result:"complete", remaining:0, answered:50, correct:40, stage_results:{multiplication:{stage:"multiplication", number:1, questions:50, correct:40, wrong:10, passed:true, medal:""}}, last_round:{questions:50, correct:40, passed:true}})
     } else if(action === "waiting") {
       service.state = Object.assign({}, service.state, {answered:50, correct:40, question:null, remaining:120})
     } else if(action === "waiting-fail") {
@@ -176,83 +176,172 @@ Item {
         return find(window.contentItem(), name)
 
     def test_visible_question_and_timer_use_practice_state(self):
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "7 × 8 = ?")
         self.assertEqual(self.view("practiceCountdown").property("text"), "30:00 left in this round")
 
     def test_finished_questions_wait_for_deadline_without_asking_more(self):
         state = self.step("waiting")
         self.assertTrue(state["opened"])
         self.assertTrue(state["present"])
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "All 50 answered")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "All 50 answered")
         self.assertFalse(self.view("answerField").property("visible"))
         self.assertIn("timer ends", self.view("roundGuidance").property("text"))
 
     def test_follow_up_round_resets_input_and_displays_25_question_target(self):
         state = self.step("retry")
         self.assertEqual(state["answer"], "")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 9 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "6 × 9 = ?")
         self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left in this round")
         self.assertIn("0/25 answered", self.view("roundScore").property("text"))
         self.assertIn("Goal: 20", self.view("roundScore").property("text"))
         self.assertIn("39/50", self.view("roundGuidance").property("text"))
 
-    def test_result_screen_shows_the_passed_round_score(self):
+    def test_legacy_result_screen_shows_only_the_completed_multiplication_stage(self):
         self.step("complete")
-        self.assertIn("40/50 correct", self.view("roundScore").property("text"))
-        self.assertFalse(self.view("roundMedal").isVisible())
+        self.assertIn("40/50 correct", self.view("stageResult-multiplication-score").property("text"))
+        self.assertEqual(self.view("stageResult-multiplication-medal").property("text"), "Passed!")
+        self.assertIsNone(self.view("stageResult-division"))
+        self.assertFalse(self.step("close")["covering"])
 
-    def completed_model(self, wrong, follow_up=False):
-        model = Practice()
-        model.advance(0, "2026-10-27", {"active": True, "locked": False, "school": True})
-        model.start("2026-10-27")
-        if follow_up:
-            model.finish_round()
+    def complete_round(self, model, wrong):
         for index in range(model.question_count):
             question = model.question()
-            solution = str(question["a"] * question["b"])
+            solution = str(question["a"] // question["b"] if question["operation"] == "division" else question["a"] * question["b"])
             model.answer(question["id"], "999" if index < wrong else solution)
             if index < wrong:
                 model.answer(model.question()["id"], solution)
         model.data["elapsed"] = model.duration
         model.finish_round()
+
+    def completed_model(self, wrong, follow_up=False, division_wrong=None, finish=True):
+        model = Practice()
+        model.advance(0, "2026-10-27", {"active": True, "locked": False, "school": True})
+        model.start("2026-10-27")
+        if follow_up:
+            model.finish_round()
+        self.complete_round(model, wrong)
+        if finish:
+            self.complete_round(model, wrong if division_wrong is None else division_wrong)
         return model
 
-    def test_all_medals_use_server_results_and_remain_visible_after_reopening(self):
+    def test_each_stage_medal_uses_its_own_score_and_survives_reopening(self):
         for wrong, name in ((0, "Gold"), (1, "Silver"), (2, "Bronze")):
             for follow_up in (False, True):
                 with self.subTest(wrong=wrong, follow_up=follow_up):
-                    model = self.completed_model(wrong, follow_up)
+                    model = self.completed_model(wrong, follow_up, division_wrong=2 - wrong)
                     self.apply_service_state(model.snapshot(0))
                     self.step("open")
-                    self.assertTrue(self.view("roundMedal").isVisible())
-                    self.assertEqual(self.view("medalTitle").property("text"), name + " medal!")
-                    self.assertEqual(self.view("medalBadge").property("medal"), name.lower())
-                    self.assertIn(str(wrong) + " wrong", self.view("medalMessage").property("text"))
+                    self.assertTrue(self.view("stageResults").isVisible())
+                    self.assertEqual(self.view("stageResult-multiplication-medal").property("text"), name + " medal!")
+                    division_name = ("Bronze", "Silver", "Gold")[wrong]
+                    self.assertEqual(self.view("stageResult-division-medal").property("text"), division_name + " medal!")
+                    self.assertEqual(self.view("stageResult-multiplication-wrong").property("text"), str(wrong) + " wrong")
                     questions = 25 if follow_up else 50
-                    self.assertIn(f"{questions - wrong}/{questions} correct", self.view("roundScore").property("text"))
+                    self.assertIn(f"{questions - wrong}/{questions} correct", self.view("stageResult-multiplication-score").property("text"))
+                    self.assertIn(f"{25 - (2 - wrong)}/25 correct", self.view("stageResult-division-score").property("text"))
+                    self.assertIn("Both stages passed", self.view("roundScore").property("text"))
                     self.step("close")
                     self.step("open")
-                    self.assertTrue(self.view("roundMedal").isVisible())
+                    self.assertTrue(self.view("stageResults").isVisible())
                     self.assertEqual(self.activate_main_action()["request"], {"cmd": "start"})
 
-    def test_no_medal_during_practice_parent_exit_or_a_pass_with_more_mistakes(self):
-        model = self.completed_model(0)
+    def test_parent_ending_division_shows_only_previously_earned_multiplication_reward(self):
+        model = self.completed_model(0, finish=False)
         self.apply_service_state(model.snapshot(0))
-        self.assertTrue(self.view("roundMedal").isVisible())
-        self.step("parent-ok")
-        self.step("open")
-        self.assertFalse(self.view("roundMedal").isVisible())
+        self.assertTrue(self.view("multiplicationResult").isVisible())
+        model.end_by_parent()
+        self.apply_service_state(model.snapshot(0))
+        self.assertTrue(self.view("stageResults").isVisible())
+        self.assertEqual(self.view("stageResult-multiplication-medal").property("text"), "Gold medal!")
+        self.assertIsNone(self.view("stageResult-division"))
+        self.assertIn("ended by a parent", self.view("roundScore").property("text"))
+        self.assertFalse(self.step("close")["covering"])
+
+    def test_no_unearned_medal_during_practice_or_a_pass_with_more_mistakes(self):
         for action in ("idle", "waiting", "guided", "retry"):
-            # Begin from the normal active fixture, without a completion flag.
             practice = Practice()
             practice.advance(0, "2026-10-27", {"active": True, "locked": False, "school": False})
             practice.start("2026-10-27")
             self.apply_service_state(practice.snapshot(0))
             self.step(action)
-            self.assertFalse(self.view("roundMedal").isVisible(), action)
+            self.assertFalse(self.view("stageResults").isVisible(), action)
+            self.assertFalse(self.view("multiplicationResult").isVisible(), action)
         self.apply_service_state(self.completed_model(3).snapshot(0))
-        self.assertFalse(self.view("roundMedal").isVisible())
-        self.assertIn("47/50 correct", self.view("roundScore").property("text"))
+        for stage, score in (("multiplication", "47/50"), ("division", "22/25")):
+            self.assertEqual(self.view("stageResult-" + stage + "-medal").property("text"), "Passed!")
+            self.assertIn(score + " correct", self.view("stageResult-" + stage + "-score").property("text"))
+
+    def test_division_transition_keeps_overlay_and_resets_input_and_timer(self):
+        self.step("answer")
+        self.step("correct")
+        model = self.completed_model(0, finish=False)
+        model.data["question"] = {"id": "division-seven", "a": 56, "b": 7, "operation": "division", "stage": "first"}
+        self.apply_service_state(model.snapshot(0))
+        state = self.step("inspect")
+        self.assertTrue(state["covering"])
+        self.assertTrue(state["present"])
+        self.assertEqual(state["answer"], "")
+        self.assertEqual(state["feedback"], "")
+        self.assertIn("Stage 2 of 2", self.view("practiceHeading").property("text"))
+        self.assertEqual(self.view("practiceQuestion").property("text"), "56 ÷ 7 = ?")
+        self.assertEqual(self.view("practiceCountdown").property("text"), "15:00 left in this round")
+        self.assertIn("0/25 answered", self.view("roundScore").property("text"))
+        self.assertIn("Goal: 20", self.view("roundScore").property("text"))
+        self.assertIn("Gold medal", self.view("multiplicationResult-summary").property("text"))
+        self.assertTrue(self.view("answerField").property("activeFocus"))
+        self.assertTrue(self.step("close")["parentOpen"])
+
+    def test_division_hint_reveal_and_enter_continue_use_the_quotient(self):
+        from PySide6.QtQuick import QQuickWindow
+        model = self.completed_model(0, finish=False)
+        model.data["question"] = {"id": "division-seven", "a": 56, "b": 7, "operation": "division", "stage": "first"}
+        model.answer("division-seven", "9")
+        self.apply_service_state(model.snapshot(0))
+        self.assertEqual(self.view("practiceQuestion").property("text"), "56 ÷ 7 = ?")
+        self.assertIn("7 × what number makes 56?", self.view("questionHelp").property("text"))
+        self.assertNotIn("8", self.view("questionHelp").property("text"))
+        model.answer(model.question()["id"], "9")
+        self.apply_service_state(model.snapshot(0))
+        self.assertEqual(self.view("practiceQuestion").property("text"), "56 ÷ 7 = 8")
+        self.assertIn("0 correct", self.view("roundScore").property("text"))
+        window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
+        QTest.keyClick(window, Qt.Key_Return)
+        self.assertEqual(self.step("inspect")["request"], {"cmd": "acknowledge", "question": model.question()["id"]})
+
+    def test_waiting_text_distinguishes_next_stage_from_final_completion(self):
+        self.step("waiting")
+        self.assertIn("Division starts", self.view("roundGuidance").property("text"))
+        self.assertNotIn("desktop unlocks", self.view("roundGuidance").property("text"))
+        model = self.completed_model(1, finish=False)
+        for _ in range(25):
+            q = model.question()
+            model.answer(q["id"], str(q["a"] // q["b"]))
+        self.apply_service_state(model.snapshot(0))
+        self.assertIn("desktop unlocks", self.view("roundGuidance").property("text"))
+        self.assertEqual(self.view("practiceQuestion").property("text"), "All 25 answered")
+        self.assertFalse(self.view("answerField").isVisible())
+
+    def test_division_follow_up_returns_keyboard_focus_from_waiting_to_the_answer(self):
+        from PySide6.QtQuick import QQuickWindow
+        model = self.completed_model(0, finish=False)
+        for index in range(25):
+            q = model.question()
+            solution = str(q["a"] // q["b"])
+            model.answer(q["id"], solution if index < 19 else "999")
+            if index >= 19:
+                model.answer(model.question()["id"], solution)
+        self.apply_service_state(model.snapshot(0))
+        self.assertFalse(self.view("answerField").isVisible())
+        model.data["elapsed"] = 900
+        model.finish_round()
+        self.apply_service_state(model.snapshot(0))
+        self.assertTrue(self.view("answerField").property("activeFocus"))
+        self.assertIn("Round 2", self.view("practiceHeading").property("text"))
+        self.assertIn("19/25", self.view("roundGuidance").property("text"))
+        window = next(window for window in APP.allWindows() if isinstance(window, QQuickWindow))
+        QTest.keyClick(window, Qt.Key_1)
+        QTest.keyClick(window, Qt.Key_Return)
+        self.assertEqual(self.step("inspect")["request"], {"cmd": "answer", "question": model.question()["id"], "answer": "1"})
 
     def test_medal_goals_are_shown_before_starting_but_not_under_questions(self):
         self.step("idle")
@@ -275,21 +364,21 @@ Item {
 
     def test_guided_retry_keeps_question_hides_answer_and_preserves_score(self):
         self.step("guided")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "7 × 8 = ?")
         self.assertIn("7 × 4", self.view("questionHelp").property("text"))
         self.assertNotIn("56", self.view("questionHelp").property("text"))
         self.assertEqual(self.view("practiceAction").property("text"), "Check retry")
         self.assertTrue(self.view("answerField").property("visible"))
         self.assertEqual(self.step("answer")["request"]["question"], "guided-one")
         self.step("retry-correct")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 6 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "6 × 6 = ?")
         self.assertIn("1/50 answered", self.view("roundScore").property("text"))
         self.assertIn("0 correct", self.view("roundScore").property("text"))
 
     def test_revealed_answer_waits_for_continue_and_enter_acknowledges(self):
         from PySide6.QtQuick import QQuickWindow
         self.step("reveal")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = 56")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "7 × 8 = 56")
         self.assertFalse(self.view("answerField").property("visible"))
         self.assertEqual(self.view("practiceAction").property("text"), "Continue")
         self.assertTrue(self.view("practiceAction").property("enabled"))
@@ -299,12 +388,12 @@ Item {
         state = self.step("inspect")
         self.assertEqual(state["request"], {"cmd": "acknowledge", "question": "revealed-one"})
         self.step("acknowledged")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "6 × 6 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "6 × 6 = ?")
         self.assertTrue(self.view("answerField").property("visible"))
 
     def test_final_scored_question_still_shows_its_retry(self):
         self.step("guided-last")
-        self.assertEqual(self.view("multiplicationQuestion").property("text"), "7 × 8 = ?")
+        self.assertEqual(self.view("practiceQuestion").property("text"), "7 × 8 = ?")
         self.assertTrue(self.view("answerField").property("visible"))
         self.assertEqual(self.view("practiceAction").property("text"), "Check retry")
         self.assertIn("50/50 answered", self.view("roundScore").property("text"))
